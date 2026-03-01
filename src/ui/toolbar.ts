@@ -1,9 +1,10 @@
-import type { DrawMode, MapSpec } from "../state/types";
+import type { DrawMode, MapSpec, ScalePercent } from "../state/types";
 
 export type StatusKind = "info" | "warn" | "error";
 
 export interface ToolbarCallbacks {
   onMapChange: (mapId: string) => void;
+  onScaleChange: (scalePercent: ScalePercent) => void;
   onModeChange: (mode: DrawMode) => void;
   onClearAll: () => void;
   onExportPng: () => void;
@@ -14,6 +15,7 @@ export interface ToolbarCallbacks {
 export class ToolbarView {
   private readonly root: HTMLDivElement;
   private readonly mapSelect: HTMLSelectElement;
+  private readonly scaleSelect: HTMLSelectElement;
   private readonly segmentButton: HTMLButtonElement;
   private readonly polylineButton: HTMLButtonElement;
   private readonly clearButton: HTMLButtonElement;
@@ -38,6 +40,22 @@ export class ToolbarView {
       this.callbacks.onMapChange(this.mapSelect.value);
     });
     mapGroup.append(mapLabel, this.mapSelect);
+
+    const scaleGroup = this.createGroup();
+    const scaleLabel = document.createElement("label");
+    scaleLabel.textContent = "Scale";
+    this.scaleSelect = document.createElement("select");
+    for (const scale of [25, 50, 75, 100] as const) {
+      const option = document.createElement("option");
+      option.value = String(scale);
+      option.textContent = `${scale}%`;
+      this.scaleSelect.append(option);
+    }
+    this.scaleSelect.value = "25";
+    this.scaleSelect.addEventListener("change", () => {
+      this.callbacks.onScaleChange(Number(this.scaleSelect.value) as ScalePercent);
+    });
+    scaleGroup.append(scaleLabel, this.scaleSelect);
 
     const modeGroup = this.createGroup();
     const modeLabel = document.createElement("label");
@@ -107,6 +125,10 @@ export class ToolbarView {
     this.mapSelect.value = activeMapId;
   }
 
+  setScale(scalePercent: ScalePercent): void {
+    this.scaleSelect.value = String(scalePercent);
+  }
+
   setMode(mode: DrawMode): void {
     this.segmentButton.classList.toggle("active", mode === "segment");
     this.polylineButton.classList.toggle("active", mode === "polyline");
@@ -119,6 +141,7 @@ export class ToolbarView {
 
   private setMapControlsEnabled(enabled: boolean): void {
     this.mapSelect.disabled = !enabled;
+    this.scaleSelect.disabled = !enabled;
     this.segmentButton.disabled = !enabled;
     this.polylineButton.disabled = !enabled;
     this.clearButton.disabled = !enabled;

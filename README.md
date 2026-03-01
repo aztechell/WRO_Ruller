@@ -5,6 +5,7 @@ Static browser version of the WRO map ruler tool, designed for GitHub Pages.
 ## Features
 
 - Loads map list from `public/maps/config.txt`
+- Map scale selector: `25%`, `50%`, `75%`, `100%` (default `25%`)
 - Segment and polyline measurement modes
 - Distance labels in millimeters
 - Vertex snapping
@@ -13,11 +14,25 @@ Static browser version of the WRO map ruler tool, designed for GitHub Pages.
 - Export current viewport as PNG
 - Save/Load drawing session as JSON
 
+`public/maps/config.txt` supports an optional startup directive:
+
+```text
+default WRO_2026_Junior.png
+```
+
+Map lines remain:
+
+```text
+<image_filename> <real_width_mm> <real_height_mm>
+```
+
 ## Project layout
 
 ```text
 public/maps/         # map PNGs + config.txt
+public/maps/scaled/  # generated scaled PNG maps
 src/                 # app code
+scripts/             # utility scripts
 tests/               # vitest unit tests
 .github/workflows/   # GitHub Pages deployment workflow
 ```
@@ -32,6 +47,7 @@ Commands:
 
 ```bash
 npm install
+npm run maps:generate-scales
 npm run dev
 ```
 
@@ -48,13 +64,9 @@ npm run build
 2. In repository settings, set Pages source to GitHub Actions.
 3. Workflow `.github/workflows/deploy-pages.yml` builds and deploys `dist/`.
 
-By default, Vite base path is:
+Default Vite base path is relative (`./`) so it works for GitHub project pages without extra config.
 
-```text
-/WRO_Ruller/
-```
-
-Override base path if needed:
+Override base path if you want:
 
 ```bash
 VITE_BASE=/your-repo-name/ npm run build

@@ -4,7 +4,7 @@ import { loadMapsFromConfig, type LoadedMap } from "../io/mapConfig";
 import { parseSession, serializeSession } from "../io/session";
 import { CanvasRenderer } from "../render/canvasRenderer";
 import { AppStore } from "../state/store";
-import type { DrawMode, MapSpec, ViewState } from "../state/types";
+import type { DrawMode, MapSpec, ScalePercent, ViewState } from "../state/types";
 import { ToolbarView } from "../ui/toolbar";
 
 export class App {
@@ -19,6 +19,8 @@ export class App {
 
   private inputController: InputController | null = null;
   private renderHandle: number | null = null;
+  private currentScalePercent: ScalePercent = 25;
+  private mapLoadRequestId = 0;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -35,6 +37,7 @@ export class App {
     this.renderer = new CanvasRenderer(this.canvas);
     this.toolbar = new ToolbarView(toolbarHost, {
       onMapChange: (mapId) => this.handleMapChange(mapId),
+      onScaleChange: (scalePercent) => this.handleScaleChange(scalePercent),
       onModeChange: (mode) => this.handleModeChange(mode),
       onClearAll: () => this.handleClearAll(),
       onExportPng: () => this.handleExportPng(),
@@ -56,6 +59,7 @@ export class App {
   async start(): Promise<void> {
     this.resizeObserver.observe(this.stage);
     this.handleResize();
+    this.toolbar.setScale(this.currentScalePercent);
 
     this.inputController = new InputController({
       canvas: this.canvas,
@@ -69,17 +73,25 @@ export class App {
     this.scheduleRender();
   }
 
-  private async loadMaps(): Promise<void> {
+  private async loadMaps(preferredFilename: string | null = null): Promise<void> {
+    const requestId = this.mapLoadRequestId + 1;
+    this.mapLoadRequestId = requestId;
     const configUrl = `${import.meta.env.BASE_URL}maps/config.txt`;
-    const { maps, warnings } = await loadMapsFromConfig(configUrl);
+    const { maps, defaultMapId, warnings } = await loadMapsFromConfig(configUrl, {
+      scalePercent: this.currentScalePercent,
+    });
+    if (requestId !== this.mapLoadRequestId) {
+      return;
+    }
     this.mapsById.clear();
     for (const map of maps) {
       this.mapsById.set(map.spec.id, map);
     }
 
     const mapSpecs = this.getMapSpecs();
-    const firstMap = maps[0] ?? null;
-    this.toolbar.setMaps(mapSpecs, firstMap?.spec.id ?? null);
+    const startupMap = this.pickStartupMap(maps, defaultMapId, preferredFilename);
+    this.toolbar.setMaps(mapSpecs, startupMap?.spec.id ?? null);
+    this.toolbar.setScale(this.currentScalePercent);
 
     if (warnings.length > 0) {
       for (const warning of warnings) {
@@ -87,21 +99,44 @@ export class App {
       }
     }
 
-    if (!firstMap) {
+    if (!startupMap) {
       this.toolbar.setStatus("No valid maps loaded", "warn");
       return;
     }
 
-    this.store.setActiveMap(firstMap.spec.id);
-    this.fitViewToMap(firstMap);
+    this.store.setActiveMap(startupMap.spec.id);
+    this.fitViewToMap(startupMap);
     this.canvas.focus();
 
     if (warnings.length > 0) {
-      this.toolbar.setStatus(`Loaded ${maps.length} map(s), ${warnings.length} warning(s)`, "warn");
+      this.toolbar.setStatus(
+        `Loaded ${maps.length} map(s) at ${this.currentScalePercent}%, ${warnings.length} warning(s)`,
+        "warn",
+      );
       return;
     }
 
-    this.toolbar.setStatus(`Loaded ${maps.length} map(s)`, "info");
+    this.toolbar.setStatus(`Loaded ${maps.length} map(s) at ${this.currentScalePercent}%`, "info");
+  }
+
+  private pickStartupMap(
+    maps: LoadedMap[],
+    defaultMapId: string | null,
+    preferredFilename: string | null,
+  ): LoadedMap | null {
+    if (maps.length === 0) {
+      return null;
+    }
+    if (preferredFilename) {
+      const preferred = maps.find((map) => map.spec.filename === preferredFilename);
+      if (preferred) {
+        return preferred;
+      }
+    }
+    if (!defaultMapId) {
+      return maps[0];
+    }
+    return maps.find((map) => map.spec.id === defaultMapId) ?? maps[0];
   }
 
   private getMapSpecs(): MapSpec[] {
@@ -118,6 +153,17 @@ export class App {
 
   private handleModeChange(mode: DrawMode): void {
     this.store.setMode(mode);
+    this.canvas.focus();
+  }
+
+  private handleScaleChange(scalePercent: ScalePercent): void {
+    if (this.currentScalePercent === scalePercent) {
+      return;
+    }
+    const preferredFilename = this.getActiveMap()?.spec.filename ?? null;
+    this.currentScalePercent = scalePercent;
+    this.toolbar.setStatus(`Loading ${scalePercent}% maps...`, "info");
+    void this.loadMaps(preferredFilename);
     this.canvas.focus();
   }
 

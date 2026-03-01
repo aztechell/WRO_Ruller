@@ -1,4 +1,4 @@
-import type { MapSpec } from "../state/types";
+import type { MapSpec, ScalePercent } from "../state/types";
 
 export interface MapConfigEntry {
   filename: string;
@@ -8,6 +8,7 @@ export interface MapConfigEntry {
 
 export interface ParseMapConfigResult {
   entries: MapConfigEntry[];
+  defaultFilename: string | null;
   warnings: string[];
 }
 
@@ -19,11 +20,17 @@ export interface LoadedMap {
 
 export interface LoadMapsResult {
   maps: LoadedMap[];
+  defaultMapId: string | null;
   warnings: string[];
+}
+
+export interface LoadMapsOptions {
+  scalePercent: ScalePercent;
 }
 
 export function parseMapConfig(text: string): ParseMapConfigResult {
   const entries: MapConfigEntry[] = [];
+  let defaultFilename: string | null = null;
   const warnings: string[] = [];
   const lines = text.split(/\r?\n/);
 
@@ -35,6 +42,15 @@ export function parseMapConfig(text: string): ParseMapConfigResult {
     }
 
     const parts = trimmed.split(/\s+/);
+    if (parts[0].toLowerCase() === "default") {
+      if (parts.length !== 2) {
+        warnings.push(`config.txt:${lineIndex + 1} ignored (default expects filename)`);
+        continue;
+      }
+      defaultFilename = parts[1];
+      continue;
+    }
+
     if (parts.length !== 3) {
       warnings.push(`config.txt:${lineIndex + 1} ignored (expected 3 tokens)`);
       continue;
@@ -62,7 +78,7 @@ export function parseMapConfig(text: string): ParseMapConfigResult {
     });
   }
 
-  return { entries, warnings };
+  return { entries, defaultFilename, warnings };
 }
 
 function normalizeMapId(filename: string): string {
@@ -80,7 +96,11 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-export async function loadMapsFromConfig(configUrl = "/maps/config.txt"): Promise<LoadMapsResult> {
+export async function loadMapsFromConfig(
+  configUrl = "/maps/config.txt",
+  options: LoadMapsOptions = { scalePercent: 25 },
+): Promise<LoadMapsResult> {
+  const { scalePercent } = options;
   const warnings: string[] = [];
   let configText = "";
   try {
@@ -88,6 +108,7 @@ export async function loadMapsFromConfig(configUrl = "/maps/config.txt"): Promis
     if (!response.ok) {
       return {
         maps: [],
+        defaultMapId: null,
         warnings: [`Failed to load ${configUrl} (HTTP ${response.status})`],
       };
     }
@@ -96,6 +117,7 @@ export async function loadMapsFromConfig(configUrl = "/maps/config.txt"): Promis
     const message = error instanceof Error ? error.message : String(error);
     return {
       maps: [],
+      defaultMapId: null,
       warnings: [`Failed to load ${configUrl}: ${message}`],
     };
   }
@@ -106,11 +128,21 @@ export async function loadMapsFromConfig(configUrl = "/maps/config.txt"): Promis
   const maps: LoadedMap[] = [];
   const idCounts = new Map<string, number>();
   const baseUrl = new URL(configUrl, window.location.href);
+  const normalizedScale = String(scalePercent);
 
   for (const entry of parsed.entries) {
-    const imageUrl = new URL(entry.filename, baseUrl).toString();
+    const originalUrl = new URL(entry.filename, baseUrl).toString();
+    const scaledUrl = new URL(`scaled/${normalizedScale}/${entry.filename}`, baseUrl).toString();
+    let imageUrl = scaledUrl;
     try {
-      const image = await loadImage(imageUrl);
+      let image: HTMLImageElement;
+      try {
+        image = await loadImage(scaledUrl);
+      } catch {
+        image = await loadImage(originalUrl);
+        warnings.push(`${entry.filename} scaled ${scalePercent}% missing, fallback to original`);
+        imageUrl = originalUrl;
+      }
       if (image.naturalWidth <= 0 || image.naturalHeight <= 0) {
         warnings.push(`${entry.filename} ignored (invalid image dimensions)`);
         continue;
@@ -118,12 +150,14 @@ export async function loadMapsFromConfig(configUrl = "/maps/config.txt"): Promis
       const rawId = normalizeMapId(entry.filename);
       const seenCount = idCounts.get(rawId) ?? 0;
       idCounts.set(rawId, seenCount + 1);
-      const id = seenCount === 0 ? rawId : `${rawId}_${seenCount + 1}`;
+      const baseId = seenCount === 0 ? rawId : `${rawId}_${seenCount + 1}`;
+      const id = `${baseId}@${scalePercent}`;
 
       maps.push({
         spec: {
           id,
           filename: entry.filename,
+          scalePercent,
           realWidthMm: entry.realWidthMm,
           realHeightMm: entry.realHeightMm,
           imgWidthPx: image.naturalWidth,
@@ -137,5 +171,17 @@ export async function loadMapsFromConfig(configUrl = "/maps/config.txt"): Promis
     }
   }
 
-  return { maps, warnings };
+  let defaultMapId: string | null = null;
+  if (parsed.defaultFilename) {
+    const normalize = (value: string): string => value.replace(/\\/g, "/").toLowerCase();
+    const target = normalize(parsed.defaultFilename);
+    const matched = maps.find((map) => normalize(map.spec.filename) === target);
+    if (matched) {
+      defaultMapId = matched.spec.id;
+    } else {
+      warnings.push(`default map "${parsed.defaultFilename}" not found among loaded maps`);
+    }
+  }
+
+  return { maps, defaultMapId, warnings };
 }

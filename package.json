@@ -7,8 +7,12 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "maps:generate-scales": "node scripts/generate-scaled-maps.mjs",
     "test": "vitest run --globals",
     "test:watch": "vitest --globals"
+  },
+  "dependencies": {
+    "sharp": "^0.34.4"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

@@ -4,6 +4,7 @@ import type { MapSpec } from "../src/state/types";
 const map: MapSpec = {
   id: "test",
   filename: "test.png",
+  scalePercent: 100,
   realWidthMm: 2000,
   realHeightMm: 2000,
   imgWidthPx: 1000,

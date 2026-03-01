@@ -9,6 +9,7 @@ describe("parseMapConfig", () => {
 
     const result = parseMapConfig(text);
     expect(result.warnings).toHaveLength(0);
+    expect(result.defaultFilename).toBeNull();
     expect(result.entries).toEqual([
       {
         filename: "WRO_2025_Junior.png",
@@ -34,6 +35,7 @@ describe("parseMapConfig", () => {
     ].join("\n");
 
     const result = parseMapConfig(text);
+    expect(result.defaultFilename).toBeNull();
     expect(result.entries).toEqual([
       {
         filename: "WRO_2026_Elementary.png",
@@ -42,5 +44,17 @@ describe("parseMapConfig", () => {
       },
     ]);
     expect(result.warnings.length).toBe(3);
+  });
+
+  it("parses default map directive", () => {
+    const text = [
+      "default WRO_2026_Junior.png",
+      "WRO_2025_Junior.png 2362 1143",
+      "WRO_2026_Junior.png 2362 1143",
+    ].join("\n");
+
+    const result = parseMapConfig(text);
+    expect(result.defaultFilename).toBe("WRO_2026_Junior.png");
+    expect(result.warnings).toHaveLength(0);
   });
 });

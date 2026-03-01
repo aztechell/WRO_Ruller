@@ -1,6 +1,9 @@
+export type ScalePercent = 25 | 50 | 75 | 100;
+
 export interface MapSpec {
   id: string;
   filename: string;
+  scalePercent: ScalePercent;
   realWidthMm: number;
   realHeightMm: number;
   imgWidthPx: number;
