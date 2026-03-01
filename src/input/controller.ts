@@ -10,6 +10,7 @@ export interface InputControllerOptions {
   getActiveMap: () => LoadedMap | null;
   getViewportSize: () => { width: number; height: number };
   requestRender: () => void;
+  onResetView: () => void;
 }
 
 interface ViewportBounds {
@@ -60,6 +61,7 @@ export class InputController {
   private readonly getActiveMap: () => LoadedMap | null;
   private readonly getViewportSize: () => ViewportBounds;
   private readonly requestRender: () => void;
+  private readonly onResetView: () => void;
   private readonly measureCtx: CanvasRenderingContext2D | null;
 
   private isMiddlePanning = false;
@@ -74,6 +76,7 @@ export class InputController {
     this.getActiveMap = options.getActiveMap;
     this.getViewportSize = options.getViewportSize;
     this.requestRender = options.requestRender;
+    this.onResetView = options.onResetView;
     const measureCanvas = document.createElement("canvas");
     this.measureCtx = measureCanvas.getContext("2d");
 
@@ -158,6 +161,12 @@ export class InputController {
   };
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
+    if (this.shouldCaptureSpaceKey(event)) {
+      event.preventDefault();
+      this.onResetView();
+      return;
+    }
+
     if (!this.shouldCaptureArrowKey(event)) {
       return;
     }
@@ -622,16 +631,25 @@ export class InputController {
       return false;
     }
 
-    const target = event.target;
-    if (target instanceof HTMLElement) {
-      const tag = target.tagName;
-      const isEditable =
-        target.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
-      if (isEditable && target !== this.canvas) {
-        return false;
-      }
+    return !this.isEditableEventTarget(event.target);
+  }
+
+  private shouldCaptureSpaceKey(event: KeyboardEvent): boolean {
+    if (event.code !== "Space" && event.key !== " " && event.key !== "Spacebar") {
+      return false;
     }
-    return true;
+    if (event.altKey || event.ctrlKey || event.metaKey) {
+      return false;
+    }
+    return !this.isEditableEventTarget(event.target);
+  }
+
+  private isEditableEventTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) {
+      return false;
+    }
+    const tag = target.tagName;
+    return target.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
   }
 
   private startKeyboardPanLoop(): void {
@@ -669,7 +687,7 @@ export class InputController {
     if (horizontal !== 0 || vertical !== 0) {
       const length = Math.hypot(horizontal, vertical);
       const speed = (ARROW_PAN_SPEED_PX_PER_SEC * dtSec) / length;
-      this.panBy(horizontal * speed, vertical * speed);
+      this.panBy(-horizontal * speed, -vertical * speed);
     }
 
     this.keyboardPanHandle = window.requestAnimationFrame(this.keyboardPanTick);

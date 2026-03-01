@@ -21,6 +21,7 @@ export class App {
   private readonly canvas: HTMLCanvasElement;
   private readonly loadingOverlay: HTMLDivElement;
   private readonly loadingText: HTMLDivElement;
+  private readonly helpPopup: HTMLDivElement;
   private readonly toolbar: ToolbarView;
   private readonly renderer: CanvasRenderer;
   private readonly store = new AppStore();
@@ -58,6 +59,18 @@ export class App {
     this.loadingText.textContent = "Loading maps...";
     this.loadingOverlay.append(spinner, this.loadingText);
     this.stage.appendChild(this.loadingOverlay);
+
+    this.helpPopup = document.createElement("div");
+    this.helpPopup.className = "quick-help";
+    this.helpPopup.innerHTML = [
+      "<div class=\"quick-help-title\">Quick Controls</div>",
+      "<div>Left click: draw / edit label</div>",
+      "<div>Right click: finalize polyline or delete hit</div>",
+      "<div>Middle drag or Arrows: pan view</div>",
+      "<div>Wheel: zoom</div>",
+      "<div>Space: reset view</div>",
+    ].join("");
+    this.stage.appendChild(this.helpPopup);
 
     this.root.append(toolbarHost, this.stage);
 
@@ -98,6 +111,7 @@ export class App {
       getActiveMap: () => this.getActiveMap(),
       getViewportSize: () => this.renderer.getViewportSize(),
       requestRender: () => this.scheduleRender(),
+      onResetView: () => this.resetViewToActiveMap(),
     });
 
     await this.loadManifestAndActivateMap();
@@ -293,6 +307,16 @@ export class App {
 
   private handleMapChange(mapId: string): void {
     void this.activateSingleMap(mapId, `Switched to ${this.mapManifestById.get(mapId)?.filename ?? mapId}`);
+  }
+
+  private resetViewToActiveMap(): void {
+    const activeMap = this.getActiveMap();
+    if (!activeMap) {
+      return;
+    }
+    this.fitViewToMap(activeMap);
+    this.toolbar.setStatus("View reset", "info");
+    this.canvas.focus();
   }
 
   private handleClearAll(): void {

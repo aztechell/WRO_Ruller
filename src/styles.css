@@ -152,6 +152,29 @@ body,
   cursor: crosshair;
 }
 
+.quick-help {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  max-width: 290px;
+  padding: 10px 12px;
+  border: 1px solid #94a3b8;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
+  font-size: 12px;
+  line-height: 1.35;
+  color: #334155;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.quick-help-title {
+  margin-bottom: 6px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
 .stage-loading-overlay {
   position: absolute;
   inset: 0;
@@ -163,6 +186,7 @@ body,
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.18s ease;
+  z-index: 4;
 }
 
 .stage-loading-overlay.visible {
