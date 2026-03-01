@@ -13,6 +13,8 @@ export interface ToolbarCallbacks {
   onModeChange: (mode: DrawMode) => void;
   onOrthoToggle: (enabled: boolean) => void;
   onRoundTo10Toggle: (enabled: boolean) => void;
+  onRobotToggle: (enabled: boolean) => void;
+  onRobotSizeChange: (widthMm: number, heightMm: number) => void;
   onClearAll: () => void;
   onExportPng: () => void;
   onSaveSession: () => void;
@@ -28,6 +30,9 @@ export class ToolbarView {
   private readonly arcButton: HTMLButtonElement;
   private readonly orthoButton: HTMLButtonElement;
   private readonly roundButton: HTMLButtonElement;
+  private readonly robotButton: HTMLButtonElement;
+  private readonly robotWidthInput: HTMLInputElement;
+  private readonly robotHeightInput: HTMLInputElement;
   private readonly clearButton: HTMLButtonElement;
   private readonly exportButton: HTMLButtonElement;
   private readonly saveButton: HTMLButtonElement;
@@ -106,7 +111,53 @@ export class ToolbarView {
       const next = !this.roundButton.classList.contains("active");
       this.callbacks.onRoundTo10Toggle(next);
     });
-    assistGroup.append(assistLabel, this.orthoButton, this.roundButton);
+    this.robotButton = document.createElement("button");
+    this.robotButton.className = "btn-toggle";
+    this.robotButton.textContent = "Robot";
+    this.robotButton.type = "button";
+    this.robotButton.addEventListener("click", () => {
+      const next = !this.robotButton.classList.contains("active");
+      this.callbacks.onRobotToggle(next);
+    });
+    this.robotWidthInput = document.createElement("input");
+    this.robotWidthInput.type = "number";
+    this.robotWidthInput.min = "1";
+    this.robotWidthInput.step = "1";
+    this.robotWidthInput.value = "250";
+    this.robotWidthInput.className = "robot-size-input";
+    this.robotWidthInput.title = "Robot width (mm)";
+    this.robotWidthInput.setAttribute("aria-label", "Robot width (mm)");
+    this.robotHeightInput = document.createElement("input");
+    this.robotHeightInput.type = "number";
+    this.robotHeightInput.min = "1";
+    this.robotHeightInput.step = "1";
+    this.robotHeightInput.value = "250";
+    this.robotHeightInput.className = "robot-size-input";
+    this.robotHeightInput.title = "Robot height (mm)";
+    this.robotHeightInput.setAttribute("aria-label", "Robot height (mm)");
+    const robotSizeLabel = document.createElement("span");
+    robotSizeLabel.textContent = "mm";
+    robotSizeLabel.className = "robot-size-label";
+    const emitRobotSize = () => {
+      const parsedWidth = Number.parseFloat(this.robotWidthInput.value);
+      const parsedHeight = Number.parseFloat(this.robotHeightInput.value);
+      const width = Number.isFinite(parsedWidth) && parsedWidth > 0 ? parsedWidth : 250;
+      const height = Number.isFinite(parsedHeight) && parsedHeight > 0 ? parsedHeight : 250;
+      this.robotWidthInput.value = String(Math.round(width));
+      this.robotHeightInput.value = String(Math.round(height));
+      this.callbacks.onRobotSizeChange(width, height);
+    };
+    this.robotWidthInput.addEventListener("change", emitRobotSize);
+    this.robotHeightInput.addEventListener("change", emitRobotSize);
+    assistGroup.append(
+      assistLabel,
+      this.orthoButton,
+      this.roundButton,
+      this.robotButton,
+      this.robotWidthInput,
+      this.robotHeightInput,
+      robotSizeLabel,
+    );
 
     const actionGroup = this.createGroup("toolbar-group toolbar-group--actions");
     const actionLabel = document.createElement("label");
@@ -142,6 +193,8 @@ export class ToolbarView {
 
     this.root.append(this.loadInput);
     this.setMode("segment");
+    this.setRobotEnabled(false);
+    this.setRobotSize(250, 250);
     this.setMapControlsEnabled(false);
   }
 
@@ -188,6 +241,17 @@ export class ToolbarView {
     this.roundButton.classList.toggle("active", enabled);
   }
 
+  setRobotEnabled(enabled: boolean): void {
+    this.robotButton.classList.toggle("active", enabled);
+  }
+
+  setRobotSize(widthMm: number, heightMm: number): void {
+    const clampedWidth = Number.isFinite(widthMm) && widthMm > 0 ? Math.round(widthMm) : 250;
+    const clampedHeight = Number.isFinite(heightMm) && heightMm > 0 ? Math.round(heightMm) : 250;
+    this.robotWidthInput.value = String(clampedWidth);
+    this.robotHeightInput.value = String(clampedHeight);
+  }
+
   setStatus(message: string, kind: StatusKind = "info"): void {
     if (kind === "error") {
       console.error(`[WRO Ruler] ${message}`);
@@ -208,6 +272,9 @@ export class ToolbarView {
     this.arcButton.disabled = !enabled;
     this.orthoButton.disabled = !enabled;
     this.roundButton.disabled = !enabled;
+    this.robotButton.disabled = !enabled;
+    this.robotWidthInput.disabled = !enabled;
+    this.robotHeightInput.disabled = !enabled;
     this.clearButton.disabled = !enabled;
     this.exportButton.disabled = !enabled;
     this.saveButton.disabled = !enabled;

@@ -72,6 +72,7 @@ export class App {
       "<div>Middle drag or Arrows: pan view</div>",
       "<div>Wheel: zoom</div>",
       "<div>Space: reset view</div>",
+      "<div>Robot assist: cursor rectangle (size in mm)</div>",
       "</div>",
     ].join("");
     this.stage.appendChild(this.helpDock);
@@ -85,6 +86,8 @@ export class App {
       onModeChange: (mode) => this.handleModeChange(mode),
       onOrthoToggle: (enabled) => this.handleOrthoToggle(enabled),
       onRoundTo10Toggle: (enabled) => this.handleRoundTo10Toggle(enabled),
+      onRobotToggle: (enabled) => this.handleRobotToggle(enabled),
+      onRobotSizeChange: (widthMm, heightMm) => this.handleRobotSizeChange(widthMm, heightMm),
       onClearAll: () => this.handleClearAll(),
       onExportPng: () => this.handleExportPng(),
       onSaveSession: () => this.handleSaveSession(),
@@ -95,6 +98,8 @@ export class App {
       this.toolbar.setMode(state.mode);
       this.toolbar.setOrthoEnabled(state.orthoEnabled);
       this.toolbar.setRoundTo10Enabled(state.roundTo10Enabled);
+      this.toolbar.setRobotEnabled(state.robotEnabled);
+      this.toolbar.setRobotSize(state.robotWidthMm, state.robotHeightMm);
       this.toolbar.setActiveMap(state.activeMapId);
       this.scheduleRender();
     });
@@ -292,6 +297,18 @@ export class App {
     this.canvas.focus();
   }
 
+  private handleRobotToggle(enabled: boolean): void {
+    this.store.setRobotEnabled(enabled);
+    this.toolbar.setStatus(`Robot assist ${enabled ? "enabled" : "disabled"}`, "info");
+    this.canvas.focus();
+  }
+
+  private handleRobotSizeChange(widthMm: number, heightMm: number): void {
+    this.store.setRobotSize(widthMm, heightMm);
+    this.toolbar.setStatus(`Robot size ${Math.round(widthMm)} x ${Math.round(heightMm)} mm`, "info");
+    this.canvas.focus();
+  }
+
   private handleScaleChange(scalePercent: ScalePercent): void {
     if (this.currentScalePercent === scalePercent) {
       return;
@@ -477,6 +494,9 @@ export class App {
       segments: this.store.getCurrentSegments(),
       polylines: this.store.getCurrentPolylines(),
       arcs: this.store.getCurrentArcs(),
+      robotEnabled: this.store.getState().robotEnabled,
+      robotWidthMm: this.store.getState().robotWidthMm,
+      robotHeightMm: this.store.getState().robotHeightMm,
       inProgress: this.store.getState().inProgress,
     });
   }

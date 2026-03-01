@@ -57,6 +57,9 @@ export class AppStore {
     mode: "segment",
     orthoEnabled: false,
     roundTo10Enabled: false,
+    robotEnabled: false,
+    robotWidthMm: 250,
+    robotHeightMm: 250,
     segmentsByMap: {},
     polylinesByMap: {},
     arcsByMap: {},
@@ -124,6 +127,25 @@ export class AppStore {
       return;
     }
     this.state.roundTo10Enabled = enabled;
+    this.emit();
+  }
+
+  setRobotEnabled(enabled: boolean): void {
+    if (this.state.robotEnabled === enabled) {
+      return;
+    }
+    this.state.robotEnabled = enabled;
+    this.emit();
+  }
+
+  setRobotSize(widthMm: number, heightMm: number): void {
+    const nextWidth = Number.isFinite(widthMm) && widthMm > 0 ? widthMm : this.state.robotWidthMm;
+    const nextHeight = Number.isFinite(heightMm) && heightMm > 0 ? heightMm : this.state.robotHeightMm;
+    if (nextWidth === this.state.robotWidthMm && nextHeight === this.state.robotHeightMm) {
+      return;
+    }
+    this.state.robotWidthMm = nextWidth;
+    this.state.robotHeightMm = nextHeight;
     this.emit();
   }
 
@@ -393,6 +415,15 @@ export class AppStore {
     this.state.mode = session.ui.mode;
     this.state.orthoEnabled = Boolean(session.ui.orthoEnabled);
     this.state.roundTo10Enabled = Boolean(session.ui.roundTo10Enabled);
+    this.state.robotEnabled = Boolean(session.ui.robotEnabled);
+    this.state.robotWidthMm =
+      typeof session.ui.robotWidthMm === "number" && session.ui.robotWidthMm > 0
+        ? session.ui.robotWidthMm
+        : 250;
+    this.state.robotHeightMm =
+      typeof session.ui.robotHeightMm === "number" && session.ui.robotHeightMm > 0
+        ? session.ui.robotHeightMm
+        : 250;
     this.state.activeMapId = session.activeMapId ?? fallbackMapId;
     if (this.state.activeMapId) {
       this.ensureMapBuckets(this.state.activeMapId);

@@ -196,6 +196,9 @@ export function serializeSession(state: AppState): SessionV1 {
       mode: state.mode,
       orthoEnabled: state.orthoEnabled,
       roundTo10Enabled: state.roundTo10Enabled,
+      robotEnabled: state.robotEnabled,
+      robotWidthMm: state.robotWidthMm,
+      robotHeightMm: state.robotHeightMm,
     },
   };
 }
@@ -237,6 +240,15 @@ export function parseSession(text: string, availableMapIds: Set<string>): ParseS
   const roundTo10Enabled = isRecord(uiValue) && typeof uiValue.roundTo10Enabled === "boolean"
     ? uiValue.roundTo10Enabled
     : false;
+  const robotEnabled = isRecord(uiValue) && typeof uiValue.robotEnabled === "boolean"
+    ? uiValue.robotEnabled
+    : false;
+  const robotWidthMm = isRecord(uiValue) && typeof uiValue.robotWidthMm === "number" && uiValue.robotWidthMm > 0
+    ? uiValue.robotWidthMm
+    : 250;
+  const robotHeightMm = isRecord(uiValue) && typeof uiValue.robotHeightMm === "number" && uiValue.robotHeightMm > 0
+    ? uiValue.robotHeightMm
+    : 250;
 
   const mapsValue = payload.maps;
   if (!Array.isArray(mapsValue)) {
@@ -295,6 +307,9 @@ export function parseSession(text: string, availableMapIds: Set<string>): ParseS
         mode,
         orthoEnabled,
         roundTo10Enabled,
+        robotEnabled,
+        robotWidthMm,
+        robotHeightMm,
       },
     },
     warnings,

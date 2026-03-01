@@ -57,6 +57,9 @@ export interface AppState {
   mode: DrawMode;
   orthoEnabled: boolean;
   roundTo10Enabled: boolean;
+  robotEnabled: boolean;
+  robotWidthMm: number;
+  robotHeightMm: number;
   segmentsByMap: Record<string, Segment[]>;
   polylinesByMap: Record<string, Polyline[]>;
   arcsByMap: Record<string, ArcMeasurement[]>;
@@ -79,5 +82,8 @@ export interface SessionV1 {
     mode: DrawMode;
     orthoEnabled?: boolean;
     roundTo10Enabled?: boolean;
+    robotEnabled?: boolean;
+    robotWidthMm?: number;
+    robotHeightMm?: number;
   };
 }

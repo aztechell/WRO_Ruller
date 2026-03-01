@@ -6,6 +6,9 @@ const stateFixture: AppState = {
   mode: "polyline",
   orthoEnabled: true,
   roundTo10Enabled: true,
+  robotEnabled: true,
+  robotWidthMm: 210,
+  robotHeightMm: 190,
   segmentsByMap: {
     "map-a": [
       {
@@ -64,6 +67,9 @@ describe("session serialization", () => {
     expect(parsed.session?.ui.mode).toBe("polyline");
     expect(parsed.session?.ui.orthoEnabled).toBe(true);
     expect(parsed.session?.ui.roundTo10Enabled).toBe(true);
+    expect(parsed.session?.ui.robotEnabled).toBe(true);
+    expect(parsed.session?.ui.robotWidthMm).toBe(210);
+    expect(parsed.session?.ui.robotHeightMm).toBe(190);
     expect(parsed.session?.maps).toHaveLength(1);
     expect(parsed.session?.maps[0].arcs).toHaveLength(1);
   });

@@ -1,5 +1,5 @@
 import { arcLengthMm, computeArcFromStartHeadingAndPoint, sampleArcPoints } from "../geometry/arc";
-import { interiorAngleDeg, midpoint, roundedDistanceMm, worldToScreen } from "../geometry/measure";
+import { interiorAngleDeg, midpoint, mmPerPxX, mmPerPxY, roundedDistanceMm, worldToScreen } from "../geometry/measure";
 import type { LoadedMap } from "../io/mapConfig";
 import type {
   ArcMeasurement,
@@ -19,6 +19,9 @@ export interface RenderScene {
   segments: Segment[];
   polylines: Polyline[];
   arcs: ArcMeasurement[];
+  robotEnabled: boolean;
+  robotWidthMm: number;
+  robotHeightMm: number;
   inProgress: InProgressState;
 }
 
@@ -76,6 +79,14 @@ export class CanvasRenderer {
     this.drawMapBorder(view.zoom, map.spec.imgWidthPx, map.spec.imgHeightPx);
     this.drawCommittedGeometry(scene.segments, scene.polylines, scene.arcs, map.spec, view.zoom);
     this.drawInProgressGeometry(scene.mode, scene.inProgress, pointer, map.spec, view.zoom);
+    this.drawRobotOverlay(
+      pointer,
+      map.spec,
+      view.zoom,
+      scene.robotEnabled,
+      scene.robotWidthMm,
+      scene.robotHeightMm,
+    );
     ctx.restore();
 
     this.drawCommittedLabels(map, view, scene.segments, scene.polylines, scene.arcs);
@@ -202,6 +213,53 @@ export class CanvasRenderer {
       this.drawVertex(inProgress.arcStart, zoom);
     }
 
+    ctx.restore();
+  }
+
+  private drawRobotOverlay(
+    pointer: PointPx | null,
+    mapSpec: MapSpec,
+    zoom: number,
+    enabled: boolean,
+    robotWidthMm: number,
+    robotHeightMm: number,
+  ): void {
+    if (!enabled || !pointer) {
+      return;
+    }
+
+    const mppX = mmPerPxX(mapSpec);
+    const mppY = mmPerPxY(mapSpec);
+    if (!Number.isFinite(mppX) || !Number.isFinite(mppY) || mppX <= 0 || mppY <= 0) {
+      return;
+    }
+    if (!Number.isFinite(robotWidthMm) || !Number.isFinite(robotHeightMm) || robotWidthMm <= 0 || robotHeightMm <= 0) {
+      return;
+    }
+
+    const widthPx = robotWidthMm / mppX;
+    const heightPx = robotHeightMm / mppY;
+    if (!Number.isFinite(widthPx) || !Number.isFinite(heightPx) || widthPx <= 0 || heightPx <= 0) {
+      return;
+    }
+
+    const left = pointer.x - widthPx * 0.5;
+    const top = pointer.y - heightPx * 0.5;
+
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.setLineDash([8 / zoom, 6 / zoom]);
+    ctx.fillStyle = "rgba(250, 204, 21, 0.18)";
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.95)";
+    ctx.lineWidth = 1.4 / zoom;
+    ctx.fillRect(left, top, widthPx, heightPx);
+    ctx.strokeRect(left, top, widthPx, heightPx);
+
+    ctx.setLineDash([]);
+    ctx.strokeStyle = "rgba(202, 138, 4, 0.95)";
+    ctx.lineWidth = 1 / zoom;
+    ctx.strokeRect(left, top, widthPx, heightPx);
+    this.drawVertex(pointer, zoom);
     ctx.restore();
   }
 
