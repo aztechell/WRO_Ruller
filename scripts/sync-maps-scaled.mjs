@@ -3,9 +3,7 @@ import path from "node:path";
 
 const rootDir = process.cwd();
 const sourceDir = path.join(rootDir, "maps_scaled");
-const sourceConfig = path.join(rootDir, "maps", "config.txt");
-const sourceScaledConfig = path.join(sourceDir, "config.txt");
-const targetConfig = path.join(rootDir, "public", "maps", "config.txt");
+const sourceConfig = path.join(sourceDir, "config.txt");
 const targetDir = path.join(rootDir, "public", "maps_scaled");
 const targetScaledConfig = path.join(targetDir, "config.txt");
 
@@ -32,12 +30,9 @@ async function syncConfig() {
   try {
     await fs.access(sourceConfig);
   } catch {
-    return;
+    throw new Error(`Missing config: ${path.relative(rootDir, sourceConfig)}`);
   }
-  await fs.mkdir(path.dirname(targetConfig), { recursive: true });
   await fs.mkdir(targetDir, { recursive: true });
-  await fs.copyFile(sourceConfig, targetConfig);
-  await fs.copyFile(sourceConfig, sourceScaledConfig);
   await fs.copyFile(sourceConfig, targetScaledConfig);
 }
 

@@ -39,7 +39,7 @@ export class App {
   constructor(root: HTMLElement) {
     this.root = root;
     this.root.className = "app-root";
-    this.configUrl = `${import.meta.env.BASE_URL}maps/config.txt`;
+    this.configUrl = `${import.meta.env.BASE_URL}maps_scaled/config.txt`;
 
     const toolbarHost = document.createElement("div");
     this.stage = document.createElement("div");

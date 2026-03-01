@@ -13,4 +13,3 @@ tmp-*.jpg
 # Generated map outputs (synced from source maps)
 public/maps_scaled/
 public/maps/scaled/
-maps_scaled/config.txt

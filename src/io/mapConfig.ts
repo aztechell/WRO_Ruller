@@ -169,7 +169,7 @@ async function fetchConfigText(configUrl: string): Promise<{ text: string | null
   }
 }
 
-export async function loadMapManifest(configUrl = "/maps/config.txt"): Promise<LoadMapManifestResult> {
+export async function loadMapManifest(configUrl = "/maps_scaled/config.txt"): Promise<LoadMapManifestResult> {
   const fetched = await fetchConfigText(configUrl);
   if (!fetched.text) {
     return {
@@ -201,19 +201,10 @@ export async function loadMapByEntry(
 ): Promise<LoadMapByEntryResult> {
   const warnings: string[] = [];
   const baseUrl = new URL(configUrl, window.location.href);
-  const scaledUrl = new URL(`../maps_scaled/${entry.filename}`, baseUrl).toString();
-  const originalUrl = new URL(entry.filename, baseUrl).toString();
-
+  const imageUrl = new URL(entry.filename, baseUrl).toString();
   let image: HTMLImageElement;
-  let usedUrl = scaledUrl;
   try {
-    try {
-      image = await loadImage(scaledUrl);
-    } catch {
-      image = await loadImage(originalUrl);
-      usedUrl = originalUrl;
-      warnings.push(`${entry.filename} missing in /maps_scaled, fallback to /maps`);
-    }
+    image = await loadImage(imageUrl);
   } catch {
     warnings.push(`${entry.filename} ignored (image load failed)`);
     return {
@@ -241,7 +232,7 @@ export async function loadMapByEntry(
         imgHeightPx: image.naturalHeight,
       },
       image,
-      url: usedUrl,
+      url: imageUrl,
     },
     warnings,
   };
@@ -249,7 +240,7 @@ export async function loadMapByEntry(
 
 // Legacy helper: loads all map images. Prefer loadMapManifest + loadMapByEntry for better memory behavior.
 export async function loadMapsFromConfig(
-  configUrl = "/maps/config.txt",
+  configUrl = "/maps_scaled/config.txt",
 ): Promise<LoadMapsResult> {
   const manifest = await loadMapManifest(configUrl);
   const maps: LoadedMap[] = [];
