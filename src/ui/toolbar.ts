@@ -23,8 +23,12 @@ export interface ToolbarCallbacks {
 
 export class ToolbarView {
   private readonly root: HTMLDivElement;
-  private readonly mapSelect: HTMLSelectElement;
-  private readonly scaleSelect: HTMLSelectElement;
+  private readonly mapPicker: HTMLDivElement;
+  private readonly mapButton: HTMLButtonElement;
+  private readonly mapMenu: HTMLDivElement;
+  private readonly scalePicker: HTMLDivElement;
+  private readonly scaleButton: HTMLButtonElement;
+  private readonly scaleMenu: HTMLDivElement;
   private readonly segmentButton: HTMLButtonElement;
   private readonly polylineButton: HTMLButtonElement;
   private readonly arcButton: HTMLButtonElement;
@@ -38,6 +42,9 @@ export class ToolbarView {
   private readonly saveButton: HTMLButtonElement;
   private readonly loadButton: HTMLButtonElement;
   private readonly loadInput: HTMLInputElement;
+  private mapOptions: MapSelectorOption[] = [];
+  private activeMapId: string | null = null;
+  private activeScale: ScalePercent = 25;
   private callbacks: ToolbarCallbacks;
 
   constructor(host: HTMLElement, callbacks: ToolbarCallbacks) {
@@ -47,29 +54,34 @@ export class ToolbarView {
     host.appendChild(this.root);
 
     const mapGroup = this.createGroup("toolbar-group toolbar-group--map");
-    const mapLabel = document.createElement("label");
-    mapLabel.textContent = "Map";
-    this.mapSelect = document.createElement("select");
-    this.mapSelect.addEventListener("change", () => {
-      this.callbacks.onMapChange(this.mapSelect.value);
-    });
-    mapGroup.append(mapLabel, this.mapSelect);
+    this.mapPicker = document.createElement("div");
+    this.mapPicker.className = "map-picker";
+    this.mapButton = document.createElement("button");
+    this.mapButton.type = "button";
+    this.mapButton.className = "btn-map-picker";
+    this.mapButton.textContent = "Map";
+    this.mapButton.setAttribute("aria-label", "Select map");
+    this.mapButton.addEventListener("click", () => this.toggleMapMenu());
+    this.mapMenu = document.createElement("div");
+    this.mapMenu.className = "map-menu";
+    this.mapMenu.setAttribute("role", "listbox");
+    this.mapPicker.append(this.mapButton, this.mapMenu);
+    mapGroup.append(this.mapPicker);
 
     const scaleGroup = this.createGroup("toolbar-group toolbar-group--scale");
-    const scaleLabel = document.createElement("label");
-    scaleLabel.textContent = "Scale";
-    this.scaleSelect = document.createElement("select");
-    for (const scale of [25, 50, 75, 100] as const) {
-      const option = document.createElement("option");
-      option.value = String(scale);
-      option.textContent = `${scale}%`;
-      this.scaleSelect.append(option);
-    }
-    this.scaleSelect.value = "25";
-    this.scaleSelect.addEventListener("change", () => {
-      this.callbacks.onScaleChange(Number(this.scaleSelect.value) as ScalePercent);
-    });
-    scaleGroup.append(scaleLabel, this.scaleSelect);
+    this.scalePicker = document.createElement("div");
+    this.scalePicker.className = "scale-picker";
+    this.scaleButton = document.createElement("button");
+    this.scaleButton.type = "button";
+    this.scaleButton.className = "btn-scale-picker";
+    this.scaleButton.textContent = "Scale";
+    this.scaleButton.setAttribute("aria-label", "Select scale");
+    this.scaleButton.addEventListener("click", () => this.toggleScaleMenu());
+    this.scaleMenu = document.createElement("div");
+    this.scaleMenu.className = "scale-menu";
+    this.scaleMenu.setAttribute("role", "listbox");
+    this.scalePicker.append(this.scaleButton, this.scaleMenu);
+    scaleGroup.append(this.scalePicker);
 
     const drawGroup = this.createGroup("toolbar-group toolbar-group--draw");
     const drawLabel = document.createElement("label");
@@ -89,7 +101,6 @@ export class ToolbarView {
     this.arcButton.textContent = "Arc";
     this.arcButton.type = "button";
     this.arcButton.addEventListener("click", () => this.callbacks.onModeChange("arc"));
-
     drawGroup.append(drawLabel, this.segmentButton, this.polylineButton, this.arcButton);
 
     const assistGroup = this.createGroup("toolbar-group toolbar-group--assist");
@@ -195,36 +206,55 @@ export class ToolbarView {
     this.setMode("segment");
     this.setRobotEnabled(false);
     this.setRobotSize(250, 250);
+    this.renderScaleMenu();
+    this.updateScaleButton();
     this.setMapControlsEnabled(false);
+
+    window.addEventListener("pointerdown", (event) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (!this.mapPicker.contains(target)) {
+        this.closeMapMenu();
+      }
+      if (!this.scalePicker.contains(target)) {
+        this.closeScaleMenu();
+      }
+    });
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        this.closeMapMenu();
+        this.closeScaleMenu();
+      }
+    });
   }
 
   setMaps(maps: MapSelectorOption[], activeMapId: string | null): void {
-    this.mapSelect.innerHTML = "";
-    for (const map of maps) {
-      const option = document.createElement("option");
-      option.value = map.id;
-      option.textContent = map.filename;
-      this.mapSelect.append(option);
-    }
-
+    this.mapOptions = maps.slice();
     if (activeMapId && maps.some((map) => map.id === activeMapId)) {
-      this.mapSelect.value = activeMapId;
-    } else if (maps.length > 0) {
-      this.mapSelect.selectedIndex = 0;
+      this.activeMapId = activeMapId;
+    } else {
+      this.activeMapId = maps[0]?.id ?? null;
     }
-
+    this.renderMapMenu();
+    this.updateMapButton();
     this.setMapControlsEnabled(maps.length > 0);
   }
 
   setActiveMap(activeMapId: string | null): void {
-    if (!activeMapId) {
+    if (!activeMapId || !this.mapOptions.some((map) => map.id === activeMapId)) {
       return;
     }
-    this.mapSelect.value = activeMapId;
+    this.activeMapId = activeMapId;
+    this.renderMapMenu();
+    this.updateMapButton();
   }
 
   setScale(scalePercent: ScalePercent): void {
-    this.scaleSelect.value = String(scalePercent);
+    this.activeScale = scalePercent;
+    this.renderScaleMenu();
+    this.updateScaleButton();
   }
 
   setMode(mode: DrawMode): void {
@@ -265,8 +295,8 @@ export class ToolbarView {
   }
 
   private setMapControlsEnabled(enabled: boolean): void {
-    this.mapSelect.disabled = !enabled;
-    this.scaleSelect.disabled = !enabled;
+    this.mapButton.disabled = !enabled;
+    this.scaleButton.disabled = !enabled;
     this.segmentButton.disabled = !enabled;
     this.polylineButton.disabled = !enabled;
     this.arcButton.disabled = !enabled;
@@ -279,6 +309,10 @@ export class ToolbarView {
     this.exportButton.disabled = !enabled;
     this.saveButton.disabled = !enabled;
     this.loadButton.disabled = !enabled;
+    if (!enabled) {
+      this.closeMapMenu();
+      this.closeScaleMenu();
+    }
   }
 
   private createGroup(className = "toolbar-group"): HTMLDivElement {
@@ -297,5 +331,100 @@ export class ToolbarView {
     button.textContent = text;
     button.addEventListener("click", onClick);
     return button;
+  }
+
+  private toggleMapMenu(): void {
+    if (this.mapMenu.classList.contains("open")) {
+      this.closeMapMenu();
+      return;
+    }
+    this.openMapMenu();
+  }
+
+  private openMapMenu(): void {
+    if (this.mapButton.disabled || this.mapOptions.length === 0) {
+      return;
+    }
+    this.closeScaleMenu();
+    this.mapMenu.classList.add("open");
+    this.mapButton.classList.add("active");
+  }
+
+  private closeMapMenu(): void {
+    this.mapMenu.classList.remove("open");
+    this.mapButton.classList.remove("active");
+  }
+
+  private renderMapMenu(): void {
+    this.mapMenu.innerHTML = "";
+    for (const map of this.mapOptions) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "map-menu-item";
+      item.textContent = map.filename;
+      item.title = map.filename;
+      item.setAttribute("role", "option");
+      item.classList.toggle("active", map.id === this.activeMapId);
+      item.addEventListener("click", () => {
+        this.closeMapMenu();
+        if (map.id !== this.activeMapId) {
+          this.callbacks.onMapChange(map.id);
+        }
+      });
+      this.mapMenu.appendChild(item);
+    }
+  }
+
+  private updateMapButton(): void {
+    const active = this.mapOptions.find((map) => map.id === this.activeMapId) ?? null;
+    this.mapButton.textContent = "Map";
+    this.mapButton.title = active ? `Map: ${active.filename}` : "Map";
+  }
+
+  private toggleScaleMenu(): void {
+    if (this.scaleMenu.classList.contains("open")) {
+      this.closeScaleMenu();
+      return;
+    }
+    this.openScaleMenu();
+  }
+
+  private openScaleMenu(): void {
+    if (this.scaleButton.disabled) {
+      return;
+    }
+    this.closeMapMenu();
+    this.scaleMenu.classList.add("open");
+    this.scaleButton.classList.add("active");
+  }
+
+  private closeScaleMenu(): void {
+    this.scaleMenu.classList.remove("open");
+    this.scaleButton.classList.remove("active");
+  }
+
+  private renderScaleMenu(): void {
+    this.scaleMenu.innerHTML = "";
+    for (const scale of [25, 50, 75, 100] as const) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "scale-menu-item";
+      item.textContent = `${scale}%`;
+      item.title = `${scale}%`;
+      item.setAttribute("role", "option");
+      item.classList.toggle("active", scale === this.activeScale);
+      item.addEventListener("click", () => {
+        this.closeScaleMenu();
+        if (scale !== this.activeScale) {
+          this.callbacks.onScaleChange(scale);
+        }
+      });
+      this.scaleMenu.appendChild(item);
+    }
+  }
+
+  private updateScaleButton(): void {
+    this.scaleButton.textContent = "Scale";
+    this.scaleButton.title = `Scale: ${this.activeScale}%`;
   }
 }

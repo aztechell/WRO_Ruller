@@ -258,6 +258,7 @@ export class App {
     this.store.setActiveMap(mapId);
 
     if (loaded.map) {
+      this.ensureRendererViewportSize();
       this.fitViewToMap(loaded.map);
       this.toolbar.setMaps(this.mapManifestOrder, mapId);
       this.canvas.focus();
@@ -412,6 +413,23 @@ export class App {
     this.renderer.resize(width, height, window.devicePixelRatio || 1);
     this.updateViewAfterResize();
     this.scheduleRender();
+  }
+
+  private ensureRendererViewportSize(): void {
+    const width = this.stage.clientWidth;
+    const height = this.stage.clientHeight;
+    if (width <= 0 || height <= 0) {
+      return;
+    }
+
+    const viewport = this.renderer.getViewportSize();
+    const widthDiff = Math.abs(viewport.width - width);
+    const heightDiff = Math.abs(viewport.height - height);
+    if (widthDiff < 1 && heightDiff < 1) {
+      return;
+    }
+
+    this.renderer.resize(width, height, window.devicePixelRatio || 1);
   }
 
   private updateViewAfterResize(): void {
