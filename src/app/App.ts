@@ -7,10 +7,15 @@ import { AppStore } from "../state/store";
 import type { DrawMode, MapSpec, ScalePercent, ViewState } from "../state/types";
 import { ToolbarView } from "../ui/toolbar";
 
+const INITIAL_FIT_FACTOR = 0.9;
+const MIN_FIT_FACTOR = 0.5;
+
 export class App {
   private readonly root: HTMLElement;
   private readonly stage: HTMLDivElement;
   private readonly canvas: HTMLCanvasElement;
+  private readonly loadingOverlay: HTMLDivElement;
+  private readonly loadingText: HTMLDivElement;
   private readonly toolbar: ToolbarView;
   private readonly renderer: CanvasRenderer;
   private readonly store = new AppStore();
@@ -32,6 +37,18 @@ export class App {
     this.canvas = document.createElement("canvas");
     this.canvas.tabIndex = 0;
     this.stage.appendChild(this.canvas);
+
+    this.loadingOverlay = document.createElement("div");
+    this.loadingOverlay.className = "stage-loading-overlay";
+    this.loadingOverlay.setAttribute("aria-hidden", "true");
+    const spinner = document.createElement("div");
+    spinner.className = "stage-loading-spinner";
+    this.loadingText = document.createElement("div");
+    this.loadingText.className = "stage-loading-text";
+    this.loadingText.textContent = "Loading maps...";
+    this.loadingOverlay.append(spinner, this.loadingText);
+    this.stage.appendChild(this.loadingOverlay);
+
     this.root.append(toolbarHost, this.stage);
 
     this.renderer = new CanvasRenderer(this.canvas);
@@ -76,47 +93,60 @@ export class App {
   private async loadMaps(preferredFilename: string | null = null): Promise<void> {
     const requestId = this.mapLoadRequestId + 1;
     this.mapLoadRequestId = requestId;
+    this.setLoadingState(true, `Loading maps (${this.currentScalePercent}%)...`);
     const configUrl = `${import.meta.env.BASE_URL}maps/config.txt`;
-    const { maps, defaultMapId, warnings } = await loadMapsFromConfig(configUrl, {
-      scalePercent: this.currentScalePercent,
-    });
-    if (requestId !== this.mapLoadRequestId) {
-      return;
-    }
-    this.mapsById.clear();
-    for (const map of maps) {
-      this.mapsById.set(map.spec.id, map);
-    }
+    try {
+      const { maps, defaultMapId, warnings } = await loadMapsFromConfig(configUrl, {
+        scalePercent: this.currentScalePercent,
+      });
+      if (requestId !== this.mapLoadRequestId) {
+        return;
+      }
+      this.mapsById.clear();
+      for (const map of maps) {
+        this.mapsById.set(map.spec.id, map);
+      }
 
-    const mapSpecs = this.getMapSpecs();
-    const startupMap = this.pickStartupMap(maps, defaultMapId, preferredFilename);
-    this.toolbar.setMaps(mapSpecs, startupMap?.spec.id ?? null);
-    this.toolbar.setScale(this.currentScalePercent);
+      const mapSpecs = this.getMapSpecs();
+      const startupMap = this.pickStartupMap(maps, defaultMapId, preferredFilename);
+      this.toolbar.setMaps(mapSpecs, startupMap?.spec.id ?? null);
+      this.toolbar.setScale(this.currentScalePercent);
 
-    if (warnings.length > 0) {
-      for (const warning of warnings) {
-        console.warn(`[WRO Ruler] ${warning}`);
+      if (warnings.length > 0) {
+        for (const warning of warnings) {
+          console.warn(`[WRO Ruler] ${warning}`);
+        }
+      }
+
+      if (!startupMap) {
+        this.toolbar.setStatus("No valid maps loaded", "warn");
+        return;
+      }
+
+      this.store.setActiveMap(startupMap.spec.id);
+      this.fitViewToMap(startupMap);
+      this.canvas.focus();
+
+      if (warnings.length > 0) {
+        this.toolbar.setStatus(
+          `Loaded ${maps.length} map(s) at ${this.currentScalePercent}%, ${warnings.length} warning(s)`,
+          "warn",
+        );
+        return;
+      }
+
+      this.toolbar.setStatus(`Loaded ${maps.length} map(s) at ${this.currentScalePercent}%`, "info");
+    } catch (error) {
+      if (requestId !== this.mapLoadRequestId) {
+        return;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      this.toolbar.setStatus(`Map load failed: ${message}`, "error");
+    } finally {
+      if (requestId === this.mapLoadRequestId) {
+        this.setLoadingState(false);
       }
     }
-
-    if (!startupMap) {
-      this.toolbar.setStatus("No valid maps loaded", "warn");
-      return;
-    }
-
-    this.store.setActiveMap(startupMap.spec.id);
-    this.fitViewToMap(startupMap);
-    this.canvas.focus();
-
-    if (warnings.length > 0) {
-      this.toolbar.setStatus(
-        `Loaded ${maps.length} map(s) at ${this.currentScalePercent}%, ${warnings.length} warning(s)`,
-        "warn",
-      );
-      return;
-    }
-
-    this.toolbar.setStatus(`Loaded ${maps.length} map(s) at ${this.currentScalePercent}%`, "info");
   }
 
   private pickStartupMap(
@@ -165,6 +195,12 @@ export class App {
     this.toolbar.setStatus(`Loading ${scalePercent}% maps...`, "info");
     void this.loadMaps(preferredFilename);
     this.canvas.focus();
+  }
+
+  private setLoadingState(isLoading: boolean, message = "Loading maps..."): void {
+    this.loadingText.textContent = message;
+    this.loadingOverlay.classList.toggle("visible", isLoading);
+    this.loadingOverlay.setAttribute("aria-hidden", String(!isLoading));
   }
 
   private handleMapChange(mapId: string): void {
@@ -256,12 +292,12 @@ export class App {
     if (!activeMap) {
       return;
     }
-    const fitZoom = this.computeFitZoom(activeMap);
+    const targets = this.computeZoomTargets(activeMap);
     const view = this.store.getState().view;
-    if (!Number.isFinite(fitZoom) || fitZoom <= 0) {
+    if (!targets) {
       return;
     }
-    if (view.minZoom === fitZoom && view.zoom >= fitZoom) {
+    if (view.minZoom === targets.minZoom && view.zoom >= targets.minZoom) {
       return;
     }
 
@@ -271,10 +307,10 @@ export class App {
       y: viewport.height * 0.5,
     };
     const centerWorld = screenToWorld(centerScreen, view);
-    const nextZoom = Math.max(view.zoom, fitZoom);
+    const nextZoom = Math.max(view.zoom, targets.minZoom);
     const nextView: ViewState = {
       zoom: nextZoom,
-      minZoom: fitZoom,
+      minZoom: targets.minZoom,
       panX: centerScreen.x - centerWorld.x * nextZoom,
       panY: centerScreen.y - centerWorld.y * nextZoom,
     };
@@ -282,13 +318,16 @@ export class App {
   }
 
   private fitViewToMap(map: LoadedMap): void {
-    const zoom = this.computeFitZoom(map);
+    const targets = this.computeZoomTargets(map);
+    if (!targets) {
+      return;
+    }
     const viewport = this.renderer.getViewportSize();
     const view: ViewState = {
-      zoom,
-      minZoom: zoom,
-      panX: (viewport.width - map.spec.imgWidthPx * zoom) * 0.5,
-      panY: (viewport.height - map.spec.imgHeightPx * zoom) * 0.5,
+      zoom: targets.initialZoom,
+      minZoom: targets.minZoom,
+      panX: (viewport.width - map.spec.imgWidthPx * targets.initialZoom) * 0.5,
+      panY: (viewport.height - map.spec.imgHeightPx * targets.initialZoom) * 0.5,
     };
     this.store.setView(view);
   }
@@ -297,6 +336,17 @@ export class App {
     const viewport = this.renderer.getViewportSize();
     const zoom = Math.min(viewport.width / map.spec.imgWidthPx, viewport.height / map.spec.imgHeightPx);
     return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  }
+
+  private computeZoomTargets(map: LoadedMap): { initialZoom: number; minZoom: number } | null {
+    const fitZoom = this.computeFitZoom(map);
+    if (!Number.isFinite(fitZoom) || fitZoom <= 0) {
+      return null;
+    }
+
+    const initialZoom = fitZoom * INITIAL_FIT_FACTOR;
+    const minZoom = fitZoom * MIN_FIT_FACTOR;
+    return { initialZoom, minZoom };
   }
 
   private scheduleRender(): void {

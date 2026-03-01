@@ -96,3 +96,41 @@ body,
   background: #e2e8f0;
   cursor: crosshair;
 }
+
+.stage-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(248, 250, 252, 0.82);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+
+.stage-loading-overlay.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.stage-loading-spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 3px solid #cbd5e1;
+  border-top-color: #0369a1;
+  animation: stage-spin 0.9s linear infinite;
+}
+
+.stage-loading-text {
+  font-size: 13px;
+  color: #0f172a;
+}
+
+@keyframes stage-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

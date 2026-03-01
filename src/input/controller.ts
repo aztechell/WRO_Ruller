@@ -19,6 +19,7 @@ interface ViewportBounds {
 
 const SNAP_RADIUS_SCREEN_PX = 12;
 const PAN_VISIBLE_MARGIN_PX = 64;
+const MAX_ZOOM_MULTIPLIER_FROM_MIN = 16;
 
 export class InputController {
   private readonly canvas: HTMLCanvasElement;
@@ -123,7 +124,7 @@ export class InputController {
     const worldAtCursor = screenToWorld(cursor, view);
 
     const zoomFactor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
-    const maxZoom = view.minZoom * 8;
+    const maxZoom = view.minZoom * MAX_ZOOM_MULTIPLIER_FROM_MIN;
     const nextZoom = clamp(view.zoom * zoomFactor, view.minZoom, maxZoom);
     if (nextZoom === view.zoom) {
       return;
