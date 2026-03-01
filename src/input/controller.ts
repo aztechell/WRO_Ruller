@@ -1,6 +1,6 @@
 import { clamp, mmPerPxX, mmPerPxY, roundedDistanceMm, screenToWorld, worldToScreen } from "../geometry/measure";
 import { findNearestSnapPoint } from "../geometry/snap";
-import { computeHeadingDeg, sampleArcPoints } from "../geometry/arc";
+import { computeArcFromStartHeadingAndPoint, computeHeadingDeg, sampleArcPoints } from "../geometry/arc";
 import type { LoadedMap } from "../io/mapConfig";
 import { AppStore } from "../state/store";
 import type { PointPx, ViewState } from "../state/types";
@@ -267,22 +267,31 @@ export class InputController {
         return;
       }
 
-      const headingDeg = computeHeadingDeg(state.inProgress.arcStart, drawPoint, activeMap.spec);
-      if (headingDeg === null) {
+      if (state.inProgress.arcHeadingDeg === null) {
+        const headingDeg = computeHeadingDeg(state.inProgress.arcStart, drawPoint, activeMap.spec);
+        if (headingDeg === null) {
+          return;
+        }
+        this.store.setArcHeading(headingDeg);
+        this.requestRender();
         return;
       }
 
-      const parameters = this.promptArcParameters();
-      if (!parameters) {
-        this.requestRender();
+      const previewArc = computeArcFromStartHeadingAndPoint(
+        state.inProgress.arcStart,
+        state.inProgress.arcHeadingDeg,
+        drawPoint,
+        activeMap.spec,
+      );
+      if (!previewArc) {
         return;
       }
 
       this.store.commitArc({
         start: state.inProgress.arcStart,
-        headingDeg,
-        radiusMm: parameters.radiusMm,
-        angleDeg: parameters.angleDeg,
+        headingDeg: state.inProgress.arcHeadingDeg,
+        radiusMm: previewArc.radiusMm,
+        angleDeg: previewArc.angleDeg,
       });
       this.requestRender();
       return;
@@ -431,6 +440,10 @@ export class InputController {
       return { x: basePoint.x, y: basePoint.y };
     }
 
+    if (state.mode === "arc" && state.inProgress.arcHeadingDeg !== null) {
+      return { x: basePoint.x, y: basePoint.y };
+    }
+
     let constrained: PointPx = { x: basePoint.x, y: basePoint.y };
     if (state.orthoEnabled) {
       constrained = this.applyOrtho(anchor, constrained);
@@ -476,40 +489,6 @@ export class InputController {
       x: anchor.x + nextDxMm / mppX,
       y: anchor.y + nextDyMm / mppY,
     };
-  }
-
-  private promptArcParameters():
-    | {
-        radiusMm: number;
-        angleDeg: number;
-      }
-    | null {
-    const radiusInput = window.prompt("Arc radius (mm). Use + for right, - for left", "250");
-    if (radiusInput === null) {
-      return null;
-    }
-    const radiusMm = this.parseNumericInput(radiusInput);
-    if (!Number.isFinite(radiusMm) || radiusMm === 0) {
-      window.alert("Radius must be a non-zero number");
-      return null;
-    }
-
-    const angleInput = window.prompt("Arc angle (deg). Use negative for reverse turn", "90");
-    if (angleInput === null) {
-      return null;
-    }
-    const angleDeg = this.parseNumericInput(angleInput);
-    if (!Number.isFinite(angleDeg) || angleDeg === 0) {
-      window.alert("Angle must be a non-zero number");
-      return null;
-    }
-
-    return { radiusMm, angleDeg };
-  }
-
-  private parseNumericInput(value: string): number {
-    const normalized = value.trim().replace(",", ".");
-    return Number.parseFloat(normalized);
   }
 
   private tryEditLabelAtPoint(screenPoint: PointPx, activeMap: LoadedMap): boolean {

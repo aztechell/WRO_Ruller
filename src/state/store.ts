@@ -64,6 +64,7 @@ export class AppStore {
       segmentStart: null,
       polylinePoints: [],
       arcStart: null,
+      arcHeadingDeg: null,
       pointerWorld: null,
       snapPoint: null,
     },
@@ -292,11 +293,21 @@ export class AppStore {
 
   startArc(point: PointPx): void {
     this.state.inProgress.arcStart = clonePoint(point);
+    this.state.inProgress.arcHeadingDeg = null;
+    this.emit();
+  }
+
+  setArcHeading(headingDeg: number): void {
+    if (!this.state.inProgress.arcStart) {
+      return;
+    }
+    this.state.inProgress.arcHeadingDeg = headingDeg;
     this.emit();
   }
 
   cancelArc(): void {
     this.state.inProgress.arcStart = null;
+    this.state.inProgress.arcHeadingDeg = null;
     this.emit();
   }
 
@@ -314,6 +325,7 @@ export class AppStore {
       angleDeg: arc.angleDeg,
     });
     this.state.inProgress.arcStart = null;
+    this.state.inProgress.arcHeadingDeg = null;
     this.emit();
   }
 
@@ -329,6 +341,7 @@ export class AppStore {
     this.state.inProgress.segmentStart = null;
     this.state.inProgress.polylinePoints = [];
     this.state.inProgress.arcStart = null;
+    this.state.inProgress.arcHeadingDeg = null;
     this.state.inProgress.pointerWorld = null;
     this.state.inProgress.snapPoint = null;
     if (emit) {

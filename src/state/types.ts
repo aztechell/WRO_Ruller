@@ -47,6 +47,7 @@ export interface InProgressState {
   segmentStart: PointPx | null;
   polylinePoints: PointPx[];
   arcStart: PointPx | null;
+  arcHeadingDeg: number | null;
   pointerWorld: PointPx | null;
   snapPoint: PointPx | null;
 }

@@ -42,6 +42,7 @@ const stateFixture: AppState = {
     segmentStart: null,
     polylinePoints: [],
     arcStart: null,
+    arcHeadingDeg: null,
     pointerWorld: null,
     snapPoint: null,
   },

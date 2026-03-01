@@ -67,7 +67,7 @@ export class App {
       "<div class=\"quick-help-panel\">",
       "<div class=\"quick-help-title\">Quick Controls</div>",
       "<div>Left click: draw / edit label</div>",
-      "<div>Arc mode: click start, click heading, enter radius+angle</div>",
+      "<div>Arc mode: click start, click heading, move mouse, click to commit</div>",
       "<div>Right click: finalize polyline, cancel arc setup, or delete hit</div>",
       "<div>Middle drag or Arrows: pan view</div>",
       "<div>Wheel: zoom</div>",

@@ -1,4 +1,4 @@
-import { arcLengthMm, sampleArcPoints } from "../geometry/arc";
+import { arcLengthMm, computeArcFromStartHeadingAndPoint, sampleArcPoints } from "../geometry/arc";
 import { interiorAngleDeg, midpoint, roundedDistanceMm, worldToScreen } from "../geometry/measure";
 import type { LoadedMap } from "../io/mapConfig";
 import type {
@@ -75,7 +75,7 @@ export class CanvasRenderer {
     ctx.drawImage(map.image, 0, 0, map.spec.imgWidthPx, map.spec.imgHeightPx);
     this.drawMapBorder(view.zoom, map.spec.imgWidthPx, map.spec.imgHeightPx);
     this.drawCommittedGeometry(scene.segments, scene.polylines, scene.arcs, map.spec, view.zoom);
-    this.drawInProgressGeometry(scene.mode, scene.inProgress, pointer, view.zoom);
+    this.drawInProgressGeometry(scene.mode, scene.inProgress, pointer, map.spec, view.zoom);
     ctx.restore();
 
     this.drawCommittedLabels(map, view, scene.segments, scene.polylines, scene.arcs);
@@ -142,6 +142,7 @@ export class CanvasRenderer {
     mode: DrawMode,
     inProgress: InProgressState,
     pointer: PointPx | null,
+    mapSpec: MapSpec,
     zoom: number,
   ): void {
     const ctx = this.ctx;
@@ -168,8 +169,35 @@ export class CanvasRenderer {
         this.drawVertex(point, zoom);
       }
     } else if (mode === "arc" && inProgress.arcStart) {
-      if (pointer) {
-        this.drawLine(inProgress.arcStart, pointer);
+      if (inProgress.arcHeadingDeg === null) {
+        if (pointer) {
+          this.drawLine(inProgress.arcStart, pointer);
+        }
+      } else if (pointer) {
+        const previewArc = computeArcFromStartHeadingAndPoint(
+          inProgress.arcStart,
+          inProgress.arcHeadingDeg,
+          pointer,
+          mapSpec,
+        );
+        if (previewArc) {
+          const points = sampleArcPoints(
+            {
+              id: "arc_preview",
+              start: inProgress.arcStart,
+              headingDeg: inProgress.arcHeadingDeg,
+              radiusMm: previewArc.radiusMm,
+              angleDeg: previewArc.angleDeg,
+            },
+            mapSpec,
+          );
+          this.drawPolylinePath(points);
+          if (points.length > 0) {
+            this.drawVertex(points[points.length - 1], zoom);
+          }
+        } else {
+          this.drawLine(inProgress.arcStart, pointer);
+        }
       }
       this.drawVertex(inProgress.arcStart, zoom);
     }
@@ -227,7 +255,10 @@ export class CanvasRenderer {
     if (!pointer) {
       if (mode === "arc" && inProgress.arcStart) {
         const startScreen = worldToScreen(inProgress.arcStart, view);
-        this.drawLabel("Click heading direction", startScreen.x, startScreen.y - 20, true);
+        const text = inProgress.arcHeadingDeg === null
+          ? "Click heading direction"
+          : "Move mouse to set arc, click to commit";
+        this.drawLabel(text, startScreen.x, startScreen.y - 20, true);
       }
       return;
     }
@@ -255,8 +286,45 @@ export class CanvasRenderer {
     }
 
     if (mode === "arc" && inProgress.arcStart) {
-      const startScreen = worldToScreen(inProgress.arcStart, view);
-      this.drawLabel("Click heading direction", startScreen.x, startScreen.y - 20, true);
+      if (inProgress.arcHeadingDeg === null) {
+        const startScreen = worldToScreen(inProgress.arcStart, view);
+        this.drawLabel("Click heading direction", startScreen.x, startScreen.y - 20, true);
+        return;
+      }
+
+      const previewArc = computeArcFromStartHeadingAndPoint(
+        inProgress.arcStart,
+        inProgress.arcHeadingDeg,
+        pointer,
+        map.spec,
+      );
+      if (!previewArc) {
+        const startScreen = worldToScreen(inProgress.arcStart, view);
+        this.drawLabel("Move mouse off heading line", startScreen.x, startScreen.y - 20, true);
+        return;
+      }
+
+      const points = sampleArcPoints(
+        {
+          id: "arc_preview",
+          start: inProgress.arcStart,
+          headingDeg: inProgress.arcHeadingDeg,
+          radiusMm: previewArc.radiusMm,
+          angleDeg: previewArc.angleDeg,
+        },
+        map.spec,
+      );
+      const midPoint = points[Math.floor(points.length * 0.5)] ?? inProgress.arcStart;
+      const screenMid = worldToScreen(midPoint, view);
+      const radiusText = Math.round(previewArc.radiusMm);
+      const angleText = Math.round(previewArc.angleDeg);
+      const lengthText = Math.round(arcLengthMm(previewArc.radiusMm, previewArc.angleDeg));
+      this.drawLabel(
+        `R ${radiusText} mm | A ${angleText} deg | L ${lengthText} mm`,
+        screenMid.x,
+        screenMid.y,
+        true,
+      );
     }
   }
 

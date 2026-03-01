@@ -23,6 +23,12 @@ function toPxFromMmCartesian(pointMm: PointMm, map: MapSpec): PointPx {
   };
 }
 
+function signedAngleDelta(from: PointMm, to: PointMm): number {
+  const cross = from.x * to.y - from.y * to.x;
+  const dot = from.x * to.x + from.y * to.y;
+  return Math.atan2(cross, dot);
+}
+
 export function computeHeadingDeg(start: PointPx, headingPoint: PointPx, map: MapSpec): number | null {
   const startMm = toMmCartesian(start, map);
   const headingMm = toMmCartesian(headingPoint, map);
@@ -36,6 +42,67 @@ export function computeHeadingDeg(start: PointPx, headingPoint: PointPx, map: Ma
 
 export function arcLengthMm(radiusMm: number, angleDeg: number): number {
   return Math.abs(radiusMm * (angleDeg * DEG_TO_RAD));
+}
+
+export function computeArcFromStartHeadingAndPoint(
+  start: PointPx,
+  headingDeg: number,
+  throughPoint: PointPx,
+  map: MapSpec,
+): { radiusMm: number; angleDeg: number } | null {
+  const startMm = toMmCartesian(start, map);
+  const throughMm = toMmCartesian(throughPoint, map);
+
+  const ux = throughMm.x - startMm.x;
+  const uy = throughMm.y - startMm.y;
+  const uLenSq = ux * ux + uy * uy;
+  if (uLenSq <= 0) {
+    return null;
+  }
+
+  const headingRad = headingDeg * DEG_TO_RAD;
+  const rightNormal = {
+    x: Math.sin(headingRad),
+    y: -Math.cos(headingRad),
+  };
+  const denom = 2 * (ux * rightNormal.x + uy * rightNormal.y);
+  if (Math.abs(denom) < 1e-6) {
+    return null;
+  }
+
+  const radiusMm = uLenSq / denom;
+  if (!Number.isFinite(radiusMm) || Math.abs(radiusMm) < 1e-6) {
+    return null;
+  }
+
+  const center = {
+    x: startMm.x + rightNormal.x * radiusMm,
+    y: startMm.y + rightNormal.y * radiusMm,
+  };
+
+  const radialStart = {
+    x: startMm.x - center.x,
+    y: startMm.y - center.y,
+  };
+  const radialEnd = {
+    x: throughMm.x - center.x,
+    y: throughMm.y - center.y,
+  };
+
+  const deltaTheta = signedAngleDelta(radialStart, radialEnd);
+  if (!Number.isFinite(deltaTheta) || Math.abs(deltaTheta) < 1e-6) {
+    return null;
+  }
+
+  const angleDeg = -Math.sign(radiusMm) * deltaTheta * RAD_TO_DEG;
+  if (!Number.isFinite(angleDeg) || Math.abs(angleDeg) < 1e-6) {
+    return null;
+  }
+
+  return {
+    radiusMm,
+    angleDeg,
+  };
 }
 
 export function sampleArcPoints(
