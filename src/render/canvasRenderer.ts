@@ -246,14 +246,34 @@ export class CanvasRenderer {
     ctx.fillStyle = preview ? "rgba(254, 242, 242, 0.92)" : "rgba(248, 250, 252, 0.92)";
     ctx.strokeStyle = preview ? "#dc2626" : "#475569";
     ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(left, top, width, height, 5);
+    this.addRoundedRectPath(left, top, width, height, 5);
     ctx.fill();
     ctx.stroke();
 
     ctx.fillStyle = "#0f172a";
     ctx.fillText(text, x, y);
     ctx.restore();
+  }
+
+  private addRoundedRectPath(x: number, y: number, width: number, height: number, radius: number): void {
+    const ctx = this.ctx;
+    ctx.beginPath();
+    if (typeof ctx.roundRect === "function") {
+      ctx.roundRect(x, y, width, height, radius);
+      return;
+    }
+
+    const r = Math.max(0, Math.min(radius, Math.min(width, height) * 0.5));
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx.lineTo(x + r, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
   }
 
   private drawCenteredMessage(text: string): void {
