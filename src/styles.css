@@ -125,20 +125,6 @@ body,
   border-color: #991b1b;
 }
 
-.toolbar .status {
-  min-width: 180px;
-  font-size: 12px;
-  color: #475569;
-}
-
-.toolbar .status.warn {
-  color: #b45309;
-}
-
-.toolbar .status.error {
-  color: #b91c1c;
-}
-
 .stage {
   position: relative;
   min-height: 0;
@@ -152,11 +138,34 @@ body,
   cursor: crosshair;
 }
 
-.quick-help {
+.quick-help-dock {
   position: absolute;
   top: 12px;
   right: 12px;
-  max-width: 290px;
+  z-index: 3;
+}
+
+.quick-help-trigger {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid #334155;
+  background: rgba(15, 23, 42, 0.94);
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  user-select: none;
+}
+
+.quick-help-panel {
+  position: absolute;
+  top: 34px;
+  right: 0;
+  width: 290px;
   padding: 10px 12px;
   border: 1px solid #94a3b8;
   border-radius: 10px;
@@ -165,8 +174,18 @@ body,
   font-size: 12px;
   line-height: 1.35;
   color: #334155;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.14s ease, transform 0.14s ease, visibility 0.14s ease;
   pointer-events: none;
-  z-index: 3;
+}
+
+.quick-help-dock:hover .quick-help-panel,
+.quick-help-dock:focus-within .quick-help-panel {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
 }
 
 .quick-help-title {

@@ -26,7 +26,15 @@ export interface Polyline {
   points: PointPx[];
 }
 
-export type DrawMode = "segment" | "polyline";
+export interface ArcMeasurement {
+  id: string;
+  start: PointPx;
+  headingDeg: number;
+  radiusMm: number;
+  angleDeg: number;
+}
+
+export type DrawMode = "segment" | "polyline" | "arc";
 
 export interface ViewState {
   zoom: number;
@@ -38,6 +46,7 @@ export interface ViewState {
 export interface InProgressState {
   segmentStart: PointPx | null;
   polylinePoints: PointPx[];
+  arcStart: PointPx | null;
   pointerWorld: PointPx | null;
   snapPoint: PointPx | null;
 }
@@ -49,6 +58,7 @@ export interface AppState {
   roundTo10Enabled: boolean;
   segmentsByMap: Record<string, Segment[]>;
   polylinesByMap: Record<string, Polyline[]>;
+  arcsByMap: Record<string, ArcMeasurement[]>;
   inProgress: InProgressState;
   view: ViewState;
 }
@@ -57,6 +67,7 @@ export interface SessionMapData {
   mapId: string;
   segments: Segment[];
   polylines: Polyline[];
+  arcs: ArcMeasurement[];
 }
 
 export interface SessionV1 {

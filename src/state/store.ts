@@ -1,4 +1,5 @@
 import type {
+  ArcMeasurement,
   AppState,
   DrawMode,
   PointPx,
@@ -36,6 +37,16 @@ function clonePolyline(polyline: Polyline): Polyline {
   };
 }
 
+function cloneArc(arc: ArcMeasurement): ArcMeasurement {
+  return {
+    id: arc.id,
+    start: clonePoint(arc.start),
+    headingDeg: arc.headingDeg,
+    radiusMm: arc.radiusMm,
+    angleDeg: arc.angleDeg,
+  };
+}
+
 function createId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -48,9 +59,11 @@ export class AppStore {
     roundTo10Enabled: false,
     segmentsByMap: {},
     polylinesByMap: {},
+    arcsByMap: {},
     inProgress: {
       segmentStart: null,
       polylinePoints: [],
+      arcStart: null,
       pointerWorld: null,
       snapPoint: null,
     },
@@ -82,6 +95,9 @@ export class AppStore {
     }
     if (!this.state.polylinesByMap[mapId]) {
       this.state.polylinesByMap[mapId] = [];
+    }
+    if (!this.state.arcsByMap[mapId]) {
+      this.state.arcsByMap[mapId] = [];
     }
   }
 
@@ -205,6 +221,22 @@ export class AppStore {
     return true;
   }
 
+  deleteArcById(arcId: string): boolean {
+    const mapId = this.state.activeMapId;
+    if (!mapId) {
+      return false;
+    }
+    this.ensureMapBuckets(mapId);
+    const arcs = this.state.arcsByMap[mapId];
+    const nextArcs = arcs.filter((item) => item.id !== arcId);
+    if (nextArcs.length === arcs.length) {
+      return false;
+    }
+    this.state.arcsByMap[mapId] = nextArcs;
+    this.emit();
+    return true;
+  }
+
   startSegment(point: PointPx): void {
     this.state.inProgress.segmentStart = clonePoint(point);
     this.emit();
@@ -258,9 +290,37 @@ export class AppStore {
     this.emit();
   }
 
+  startArc(point: PointPx): void {
+    this.state.inProgress.arcStart = clonePoint(point);
+    this.emit();
+  }
+
+  cancelArc(): void {
+    this.state.inProgress.arcStart = null;
+    this.emit();
+  }
+
+  commitArc(arc: Omit<ArcMeasurement, "id">): void {
+    const mapId = this.state.activeMapId;
+    if (!mapId) {
+      return;
+    }
+    this.ensureMapBuckets(mapId);
+    this.state.arcsByMap[mapId].push({
+      id: createId("arc"),
+      start: clonePoint(arc.start),
+      headingDeg: arc.headingDeg,
+      radiusMm: arc.radiusMm,
+      angleDeg: arc.angleDeg,
+    });
+    this.state.inProgress.arcStart = null;
+    this.emit();
+  }
+
   clearMap(mapId: string): void {
     this.state.segmentsByMap[mapId] = [];
     this.state.polylinesByMap[mapId] = [];
+    this.state.arcsByMap[mapId] = [];
     this.clearInProgress(false);
     this.emit();
   }
@@ -268,6 +328,7 @@ export class AppStore {
   clearInProgress(emit = true): void {
     this.state.inProgress.segmentStart = null;
     this.state.inProgress.polylinePoints = [];
+    this.state.inProgress.arcStart = null;
     this.state.inProgress.pointerWorld = null;
     this.state.inProgress.snapPoint = null;
     if (emit) {
@@ -293,17 +354,29 @@ export class AppStore {
     return this.state.polylinesByMap[mapId];
   }
 
+  getCurrentArcs(): ArcMeasurement[] {
+    const mapId = this.state.activeMapId;
+    if (!mapId) {
+      return [];
+    }
+    this.ensureMapBuckets(mapId);
+    return this.state.arcsByMap[mapId];
+  }
+
   applySession(session: SessionV1, fallbackMapId: string | null): void {
     const nextSegments: Record<string, Segment[]> = {};
     const nextPolylines: Record<string, Polyline[]> = {};
+    const nextArcs: Record<string, ArcMeasurement[]> = {};
 
     for (const mapEntry of session.maps) {
       nextSegments[mapEntry.mapId] = mapEntry.segments.map(cloneSegment);
       nextPolylines[mapEntry.mapId] = mapEntry.polylines.map(clonePolyline);
+      nextArcs[mapEntry.mapId] = (mapEntry.arcs ?? []).map(cloneArc);
     }
 
     this.state.segmentsByMap = nextSegments;
     this.state.polylinesByMap = nextPolylines;
+    this.state.arcsByMap = nextArcs;
     this.state.mode = session.ui.mode;
     this.state.orthoEnabled = Boolean(session.ui.orthoEnabled);
     this.state.roundTo10Enabled = Boolean(session.ui.roundTo10Enabled);

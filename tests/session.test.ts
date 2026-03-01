@@ -27,9 +27,21 @@ const stateFixture: AppState = {
       },
     ],
   },
+  arcsByMap: {
+    "map-a": [
+      {
+        id: "arc-1",
+        start: { x: 100, y: 200 },
+        headingDeg: 0,
+        radiusMm: 250,
+        angleDeg: 90,
+      },
+    ],
+  },
   inProgress: {
     segmentStart: null,
     polylinePoints: [],
+    arcStart: null,
     pointerWorld: null,
     snapPoint: null,
   },
@@ -52,6 +64,7 @@ describe("session serialization", () => {
     expect(parsed.session?.ui.orthoEnabled).toBe(true);
     expect(parsed.session?.ui.roundTo10Enabled).toBe(true);
     expect(parsed.session?.maps).toHaveLength(1);
+    expect(parsed.session?.maps[0].arcs).toHaveLength(1);
   });
 
   it("rejects unsupported versions", () => {

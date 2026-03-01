@@ -21,7 +21,7 @@ export class App {
   private readonly canvas: HTMLCanvasElement;
   private readonly loadingOverlay: HTMLDivElement;
   private readonly loadingText: HTMLDivElement;
-  private readonly helpPopup: HTMLDivElement;
+  private readonly helpDock: HTMLDivElement;
   private readonly toolbar: ToolbarView;
   private readonly renderer: CanvasRenderer;
   private readonly store = new AppStore();
@@ -60,17 +60,21 @@ export class App {
     this.loadingOverlay.append(spinner, this.loadingText);
     this.stage.appendChild(this.loadingOverlay);
 
-    this.helpPopup = document.createElement("div");
-    this.helpPopup.className = "quick-help";
-    this.helpPopup.innerHTML = [
+    this.helpDock = document.createElement("div");
+    this.helpDock.className = "quick-help-dock";
+    this.helpDock.innerHTML = [
+      "<div class=\"quick-help-trigger\" aria-label=\"Show instructions\" title=\"Show instructions\">?</div>",
+      "<div class=\"quick-help-panel\">",
       "<div class=\"quick-help-title\">Quick Controls</div>",
       "<div>Left click: draw / edit label</div>",
-      "<div>Right click: finalize polyline or delete hit</div>",
+      "<div>Arc mode: click start, click heading, enter radius+angle</div>",
+      "<div>Right click: finalize polyline, cancel arc setup, or delete hit</div>",
       "<div>Middle drag or Arrows: pan view</div>",
       "<div>Wheel: zoom</div>",
       "<div>Space: reset view</div>",
+      "</div>",
     ].join("");
-    this.stage.appendChild(this.helpPopup);
+    this.stage.appendChild(this.helpDock);
 
     this.root.append(toolbarHost, this.stage);
 
@@ -472,6 +476,7 @@ export class App {
       mode: this.store.getState().mode,
       segments: this.store.getCurrentSegments(),
       polylines: this.store.getCurrentPolylines(),
+      arcs: this.store.getCurrentArcs(),
       inProgress: this.store.getState().inProgress,
     });
   }

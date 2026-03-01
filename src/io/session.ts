@@ -1,4 +1,5 @@
 import type {
+  ArcMeasurement,
   AppState,
   DrawMode,
   PointPx,
@@ -18,7 +19,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isDrawMode(value: unknown): value is DrawMode {
-  return value === "segment" || value === "polyline";
+  return value === "segment" || value === "polyline" || value === "arc";
 }
 
 function readPoint(value: unknown): PointPx | null {
@@ -52,6 +53,16 @@ function clonePolyline(polyline: Polyline): Polyline {
   return {
     id: polyline.id,
     points: polyline.points.map(clonePoint),
+  };
+}
+
+function cloneArc(arc: ArcMeasurement): ArcMeasurement {
+  return {
+    id: arc.id,
+    start: clonePoint(arc.start),
+    headingDeg: arc.headingDeg,
+    radiusMm: arc.radiusMm,
+    angleDeg: arc.angleDeg,
   };
 }
 
@@ -111,6 +122,47 @@ function parsePolylines(value: unknown, warnings: string[], mapId: string): Poly
   return polylines;
 }
 
+function parseArcs(value: unknown, warnings: string[], mapId: string): ArcMeasurement[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const arcs: ArcMeasurement[] = [];
+  for (let i = 0; i < value.length; i += 1) {
+    const raw = value[i];
+    if (!isRecord(raw)) {
+      warnings.push(`Session map "${mapId}" arc[${i}] skipped (not an object)`);
+      continue;
+    }
+    const start = readPoint(raw.start);
+    const headingDeg = raw.headingDeg;
+    const radiusMm = raw.radiusMm;
+    const angleDeg = raw.angleDeg;
+    const valid =
+      start &&
+      typeof headingDeg === "number" &&
+      typeof radiusMm === "number" &&
+      typeof angleDeg === "number" &&
+      Number.isFinite(headingDeg) &&
+      Number.isFinite(radiusMm) &&
+      Number.isFinite(angleDeg) &&
+      radiusMm !== 0 &&
+      angleDeg !== 0;
+    if (!valid) {
+      warnings.push(`Session map "${mapId}" arc[${i}] skipped (invalid parameters)`);
+      continue;
+    }
+    const id = typeof raw.id === "string" && raw.id ? raw.id : createFallbackId("arc", i);
+    arcs.push({
+      id,
+      start,
+      headingDeg,
+      radiusMm,
+      angleDeg,
+    });
+  }
+  return arcs;
+}
+
 function gatherMapIds(state: AppState): string[] {
   const mapIds = new Set<string>();
   if (state.activeMapId) {
@@ -122,6 +174,9 @@ function gatherMapIds(state: AppState): string[] {
   for (const mapId of Object.keys(state.polylinesByMap)) {
     mapIds.add(mapId);
   }
+  for (const mapId of Object.keys(state.arcsByMap)) {
+    mapIds.add(mapId);
+  }
   return Array.from(mapIds).sort();
 }
 
@@ -130,6 +185,7 @@ export function serializeSession(state: AppState): SessionV1 {
     mapId,
     segments: (state.segmentsByMap[mapId] ?? []).map(cloneSegment),
     polylines: (state.polylinesByMap[mapId] ?? []).map(clonePolyline),
+    arcs: (state.arcsByMap[mapId] ?? []).map(cloneArc),
   }));
 
   return {
@@ -208,10 +264,12 @@ export function parseSession(text: string, availableMapIds: Set<string>): ParseS
     }
     const segments = parseSegments(rawMap.segments, warnings, mapId);
     const polylines = parsePolylines(rawMap.polylines, warnings, mapId);
+    const arcs = parseArcs(rawMap.arcs, warnings, mapId);
     maps.push({
       mapId,
       segments,
       polylines,
+      arcs,
     });
   }
 

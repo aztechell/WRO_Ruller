@@ -1,6 +1,16 @@
+import { arcLengthMm, sampleArcPoints } from "../geometry/arc";
 import { interiorAngleDeg, midpoint, roundedDistanceMm, worldToScreen } from "../geometry/measure";
 import type { LoadedMap } from "../io/mapConfig";
-import type { DrawMode, InProgressState, PointPx, Polyline, Segment, ViewState } from "../state/types";
+import type {
+  ArcMeasurement,
+  DrawMode,
+  InProgressState,
+  MapSpec,
+  PointPx,
+  Polyline,
+  Segment,
+  ViewState,
+} from "../state/types";
 
 export interface RenderScene {
   map: LoadedMap | null;
@@ -8,6 +18,7 @@ export interface RenderScene {
   mode: DrawMode;
   segments: Segment[];
   polylines: Polyline[];
+  arcs: ArcMeasurement[];
   inProgress: InProgressState;
 }
 
@@ -63,11 +74,11 @@ export class CanvasRenderer {
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(map.image, 0, 0, map.spec.imgWidthPx, map.spec.imgHeightPx);
     this.drawMapBorder(view.zoom, map.spec.imgWidthPx, map.spec.imgHeightPx);
-    this.drawCommittedGeometry(scene.segments, scene.polylines, view.zoom);
+    this.drawCommittedGeometry(scene.segments, scene.polylines, scene.arcs, map.spec, view.zoom);
     this.drawInProgressGeometry(scene.mode, scene.inProgress, pointer, view.zoom);
     ctx.restore();
 
-    this.drawCommittedLabels(map, view, scene.segments, scene.polylines);
+    this.drawCommittedLabels(map, view, scene.segments, scene.polylines, scene.arcs);
     this.drawPreviewLabel(map, view, scene.mode, scene.inProgress, pointer);
     this.drawSnapIndicator(view, scene.inProgress.snapPoint);
   }
@@ -88,7 +99,13 @@ export class CanvasRenderer {
     ctx.strokeRect(0, 0, width, height);
   }
 
-  private drawCommittedGeometry(segments: Segment[], polylines: Polyline[], zoom: number): void {
+  private drawCommittedGeometry(
+    segments: Segment[],
+    polylines: Polyline[],
+    arcs: ArcMeasurement[],
+    mapSpec: MapSpec,
+    zoom: number,
+  ): void {
     const ctx = this.ctx;
 
     ctx.lineWidth = 2 / zoom;
@@ -103,11 +120,20 @@ export class CanvasRenderer {
     ctx.strokeStyle = "#0f766e";
     ctx.fillStyle = "#0f766e";
     for (const polyline of polylines) {
-      for (let i = 0; i < polyline.points.length - 1; i += 1) {
-        this.drawLine(polyline.points[i], polyline.points[i + 1]);
-      }
+      this.drawPolylinePath(polyline.points);
       for (const point of polyline.points) {
         this.drawVertex(point, zoom);
+      }
+    }
+
+    ctx.strokeStyle = "#7c3aed";
+    ctx.fillStyle = "#6d28d9";
+    for (const arc of arcs) {
+      const points = sampleArcPoints(arc, mapSpec);
+      this.drawPolylinePath(points);
+      if (points.length > 0) {
+        this.drawVertex(points[0], zoom);
+        this.drawVertex(points[points.length - 1], zoom);
       }
     }
   }
@@ -132,10 +158,8 @@ export class CanvasRenderer {
       if (inProgress.segmentStart) {
         this.drawVertex(inProgress.segmentStart, zoom);
       }
-    } else {
-      for (let i = 0; i < inProgress.polylinePoints.length - 1; i += 1) {
-        this.drawLine(inProgress.polylinePoints[i], inProgress.polylinePoints[i + 1]);
-      }
+    } else if (mode === "polyline") {
+      this.drawPolylinePath(inProgress.polylinePoints);
       if (inProgress.polylinePoints.length > 0 && pointer) {
         const last = inProgress.polylinePoints[inProgress.polylinePoints.length - 1];
         this.drawLine(last, pointer);
@@ -143,6 +167,11 @@ export class CanvasRenderer {
       for (const point of inProgress.polylinePoints) {
         this.drawVertex(point, zoom);
       }
+    } else if (mode === "arc" && inProgress.arcStart) {
+      if (pointer) {
+        this.drawLine(inProgress.arcStart, pointer);
+      }
+      this.drawVertex(inProgress.arcStart, zoom);
     }
 
     ctx.restore();
@@ -153,6 +182,7 @@ export class CanvasRenderer {
     view: ViewState,
     segments: Segment[],
     polylines: Polyline[],
+    arcs: ArcMeasurement[],
   ): void {
     for (const segment of segments) {
       const center = midpoint(segment.a, segment.b);
@@ -172,6 +202,19 @@ export class CanvasRenderer {
       }
       this.drawPolylineAngleLabels(view, polyline.points);
     }
+
+    for (const arc of arcs) {
+      const points = sampleArcPoints(arc, map.spec);
+      if (points.length === 0) {
+        continue;
+      }
+      const midPoint = points[Math.floor(points.length / 2)];
+      const screenMid = worldToScreen(midPoint, view);
+      const radiusText = Math.round(arc.radiusMm);
+      const angleText = Math.round(arc.angleDeg);
+      const lengthText = Math.round(arcLengthMm(arc.radiusMm, arc.angleDeg));
+      this.drawLabel(`R ${radiusText} mm | A ${angleText} deg | L ${lengthText} mm`, screenMid.x, screenMid.y);
+    }
   }
 
   private drawPreviewLabel(
@@ -182,6 +225,10 @@ export class CanvasRenderer {
     pointer: PointPx | null,
   ): void {
     if (!pointer) {
+      if (mode === "arc" && inProgress.arcStart) {
+        const startScreen = worldToScreen(inProgress.arcStart, view);
+        this.drawLabel("Click heading direction", startScreen.x, startScreen.y - 20, true);
+      }
       return;
     }
 
@@ -204,6 +251,12 @@ export class CanvasRenderer {
         const previewPoints = [...inProgress.polylinePoints, pointer];
         this.drawPolylineAngleLabels(view, previewPoints, true);
       }
+      return;
+    }
+
+    if (mode === "arc" && inProgress.arcStart) {
+      const startScreen = worldToScreen(inProgress.arcStart, view);
+      this.drawLabel("Click heading direction", startScreen.x, startScreen.y - 20, true);
     }
   }
 
@@ -243,6 +296,15 @@ export class CanvasRenderer {
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
     ctx.stroke();
+  }
+
+  private drawPolylinePath(points: PointPx[]): void {
+    if (points.length < 2) {
+      return;
+    }
+    for (let i = 0; i < points.length - 1; i += 1) {
+      this.drawLine(points[i], points[i + 1]);
+    }
   }
 
   private drawVertex(point: PointPx, zoom: number): void {
@@ -290,7 +352,7 @@ export class CanvasRenderer {
         continue;
       }
       const screenPosition = this.computeAngleLabelPosition(prev, vertex, next, view);
-      this.drawLabel(`${Math.round(angleDeg)}°`, screenPosition.x, screenPosition.y, preview);
+      this.drawLabel(`${Math.round(angleDeg)} deg`, screenPosition.x, screenPosition.y, preview);
     }
   }
 

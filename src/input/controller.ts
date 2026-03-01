@@ -1,5 +1,6 @@
 import { clamp, mmPerPxX, mmPerPxY, roundedDistanceMm, screenToWorld, worldToScreen } from "../geometry/measure";
 import { findNearestSnapPoint } from "../geometry/snap";
+import { computeHeadingDeg, sampleArcPoints } from "../geometry/arc";
 import type { LoadedMap } from "../io/mapConfig";
 import { AppStore } from "../state/store";
 import type { PointPx, ViewState } from "../state/types";
@@ -52,6 +53,11 @@ type DeleteHit =
   | {
       kind: "polyline";
       polylineId: string;
+      distancePx: number;
+    }
+  | {
+      kind: "arc";
+      arcId: string;
       distancePx: number;
     };
 
@@ -231,7 +237,9 @@ export class InputController {
     const point = this.getCanvasPoint(event);
 
     const canEditByLabel =
-      state.inProgress.segmentStart === null && state.inProgress.polylinePoints.length === 0;
+      state.inProgress.segmentStart === null &&
+      state.inProgress.polylinePoints.length === 0 &&
+      state.inProgress.arcStart === null;
     if (canEditByLabel && this.tryEditLabelAtPoint(point, activeMap)) {
       return;
     }
@@ -252,12 +260,46 @@ export class InputController {
       return;
     }
 
+    if (state.mode === "arc") {
+      if (!state.inProgress.arcStart) {
+        this.store.startArc(drawPoint);
+        this.requestRender();
+        return;
+      }
+
+      const headingDeg = computeHeadingDeg(state.inProgress.arcStart, drawPoint, activeMap.spec);
+      if (headingDeg === null) {
+        return;
+      }
+
+      const parameters = this.promptArcParameters();
+      if (!parameters) {
+        this.requestRender();
+        return;
+      }
+
+      this.store.commitArc({
+        start: state.inProgress.arcStart,
+        headingDeg,
+        radiusMm: parameters.radiusMm,
+        angleDeg: parameters.angleDeg,
+      });
+      this.requestRender();
+      return;
+    }
+
     this.store.addPolylinePoint(drawPoint);
     this.requestRender();
   }
 
   private handleRightClick(event: MouseEvent): void {
     const state = this.store.getState();
+    if (state.mode === "arc" && state.inProgress.arcStart) {
+      this.store.cancelArc();
+      this.requestRender();
+      return;
+    }
+
     if (state.mode === "polyline" && state.inProgress.polylinePoints.length > 0) {
       if (state.inProgress.polylinePoints.length >= 2) {
         this.store.finalizePolyline();
@@ -274,14 +316,16 @@ export class InputController {
     }
 
     const point = this.getCanvasPoint(event);
-    const hit = this.findDeleteHit(point, state.view);
+    const hit = this.findDeleteHit(point, state.view, activeMap);
     if (!hit) {
       return;
     }
     if (hit.kind === "segment") {
       this.store.deleteSegmentById(hit.segmentId);
-    } else {
+    } else if (hit.kind === "polyline") {
       this.store.deletePolylineById(hit.polylineId);
+    } else {
+      this.store.deleteArcById(hit.arcId);
     }
     this.requestRender();
   }
@@ -317,7 +361,17 @@ export class InputController {
     for (const polyline of this.store.getCurrentPolylines()) {
       candidates.push(...polyline.points);
     }
+    for (const arc of this.store.getCurrentArcs()) {
+      const points = sampleArcPoints(arc, activeMap.spec);
+      if (points.length > 0) {
+        candidates.push(points[0]);
+        candidates.push(points[points.length - 1]);
+      }
+    }
     candidates.push(...state.inProgress.polylinePoints);
+    if (state.inProgress.arcStart) {
+      candidates.push(state.inProgress.arcStart);
+    }
 
     const snap = findNearestSnapPoint(world, candidates, state.view.zoom, SNAP_RADIUS_SCREEN_PX);
     const basePoint = snap ? snap.point : world;
@@ -365,10 +419,14 @@ export class InputController {
     state: ReturnType<AppStore["getState"]>,
     activeMap: LoadedMap,
   ): PointPx {
-    const anchor =
-      state.mode === "segment"
-        ? state.inProgress.segmentStart
-        : state.inProgress.polylinePoints[state.inProgress.polylinePoints.length - 1] ?? null;
+    let anchor: PointPx | null = null;
+    if (state.mode === "segment") {
+      anchor = state.inProgress.segmentStart;
+    } else if (state.mode === "polyline") {
+      anchor = state.inProgress.polylinePoints[state.inProgress.polylinePoints.length - 1] ?? null;
+    } else if (state.mode === "arc") {
+      anchor = state.inProgress.arcStart;
+    }
     if (!anchor) {
       return { x: basePoint.x, y: basePoint.y };
     }
@@ -377,7 +435,7 @@ export class InputController {
     if (state.orthoEnabled) {
       constrained = this.applyOrtho(anchor, constrained);
     }
-    if (state.roundTo10Enabled) {
+    if (state.roundTo10Enabled && state.mode !== "arc") {
       constrained = this.applyRoundTo10(anchor, constrained, activeMap);
     }
     return constrained;
@@ -418,6 +476,40 @@ export class InputController {
       x: anchor.x + nextDxMm / mppX,
       y: anchor.y + nextDyMm / mppY,
     };
+  }
+
+  private promptArcParameters():
+    | {
+        radiusMm: number;
+        angleDeg: number;
+      }
+    | null {
+    const radiusInput = window.prompt("Arc radius (mm). Use + for right, - for left", "250");
+    if (radiusInput === null) {
+      return null;
+    }
+    const radiusMm = this.parseNumericInput(radiusInput);
+    if (!Number.isFinite(radiusMm) || radiusMm === 0) {
+      window.alert("Radius must be a non-zero number");
+      return null;
+    }
+
+    const angleInput = window.prompt("Arc angle (deg). Use negative for reverse turn", "90");
+    if (angleInput === null) {
+      return null;
+    }
+    const angleDeg = this.parseNumericInput(angleInput);
+    if (!Number.isFinite(angleDeg) || angleDeg === 0) {
+      window.alert("Angle must be a non-zero number");
+      return null;
+    }
+
+    return { radiusMm, angleDeg };
+  }
+
+  private parseNumericInput(value: string): number {
+    const normalized = value.trim().replace(",", ".");
+    return Number.parseFloat(normalized);
   }
 
   private tryEditLabelAtPoint(screenPoint: PointPx, activeMap: LoadedMap): boolean {
@@ -557,7 +649,7 @@ export class InputController {
     };
   }
 
-  private findDeleteHit(screenPoint: PointPx, view: ViewState): DeleteHit | null {
+  private findDeleteHit(screenPoint: PointPx, view: ViewState, activeMap: LoadedMap): DeleteHit | null {
     let bestHit: DeleteHit | null = null;
     let bestDistance = Number.POSITIVE_INFINITY;
 
@@ -591,6 +683,26 @@ export class InputController {
       };
     };
 
+    const considerArc = (arcId: string, points: PointPx[]): void => {
+      if (points.length < 2) {
+        return;
+      }
+      for (let i = 0; i < points.length - 1; i += 1) {
+        const screenA = worldToScreen(points[i], view);
+        const screenB = worldToScreen(points[i + 1], view);
+        const distancePx = this.distancePointToSegment(screenPoint, screenA, screenB);
+        if (distancePx > DELETE_HIT_TOLERANCE_PX || distancePx >= bestDistance) {
+          continue;
+        }
+        bestDistance = distancePx;
+        bestHit = {
+          kind: "arc",
+          arcId,
+          distancePx,
+        };
+      }
+    };
+
     for (const segment of this.store.getCurrentSegments()) {
       considerSegment(segment.id, segment.a, segment.b);
     }
@@ -599,6 +711,10 @@ export class InputController {
       for (let i = 0; i < polyline.points.length - 1; i += 1) {
         considerPolyline(polyline.id, polyline.points[i], polyline.points[i + 1]);
       }
+    }
+
+    for (const arc of this.store.getCurrentArcs()) {
+      considerArc(arc.id, sampleArcPoints(arc, activeMap.spec));
     }
 
     return bestHit;

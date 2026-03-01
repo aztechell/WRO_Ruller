@@ -25,6 +25,7 @@ export class ToolbarView {
   private readonly scaleSelect: HTMLSelectElement;
   private readonly segmentButton: HTMLButtonElement;
   private readonly polylineButton: HTMLButtonElement;
+  private readonly arcButton: HTMLButtonElement;
   private readonly orthoButton: HTMLButtonElement;
   private readonly roundButton: HTMLButtonElement;
   private readonly clearButton: HTMLButtonElement;
@@ -32,7 +33,6 @@ export class ToolbarView {
   private readonly saveButton: HTMLButtonElement;
   private readonly loadButton: HTMLButtonElement;
   private readonly loadInput: HTMLInputElement;
-  private readonly statusNode: HTMLSpanElement;
   private callbacks: ToolbarCallbacks;
 
   constructor(host: HTMLElement, callbacks: ToolbarCallbacks) {
@@ -79,8 +79,13 @@ export class ToolbarView {
     this.polylineButton.textContent = "Polyline";
     this.polylineButton.type = "button";
     this.polylineButton.addEventListener("click", () => this.callbacks.onModeChange("polyline"));
+    this.arcButton = document.createElement("button");
+    this.arcButton.className = "btn-mode";
+    this.arcButton.textContent = "Arc";
+    this.arcButton.type = "button";
+    this.arcButton.addEventListener("click", () => this.callbacks.onModeChange("arc"));
 
-    drawGroup.append(drawLabel, this.segmentButton, this.polylineButton);
+    drawGroup.append(drawLabel, this.segmentButton, this.polylineButton, this.arcButton);
 
     const assistGroup = this.createGroup("toolbar-group toolbar-group--assist");
     const assistLabel = document.createElement("label");
@@ -135,11 +140,7 @@ export class ToolbarView {
       this.callbacks.onLoadSession(content);
     });
 
-    this.statusNode = document.createElement("span");
-    this.statusNode.className = "status";
-    this.statusNode.textContent = "Ready";
-
-    this.root.append(this.loadInput, this.statusNode);
+    this.root.append(this.loadInput);
     this.setMode("segment");
     this.setMapControlsEnabled(false);
   }
@@ -176,6 +177,7 @@ export class ToolbarView {
   setMode(mode: DrawMode): void {
     this.segmentButton.classList.toggle("active", mode === "segment");
     this.polylineButton.classList.toggle("active", mode === "polyline");
+    this.arcButton.classList.toggle("active", mode === "arc");
   }
 
   setOrthoEnabled(enabled: boolean): void {
@@ -187,8 +189,15 @@ export class ToolbarView {
   }
 
   setStatus(message: string, kind: StatusKind = "info"): void {
-    this.statusNode.textContent = message;
-    this.statusNode.className = `status ${kind}`;
+    if (kind === "error") {
+      console.error(`[WRO Ruler] ${message}`);
+      return;
+    }
+    if (kind === "warn") {
+      console.warn(`[WRO Ruler] ${message}`);
+      return;
+    }
+    console.info(`[WRO Ruler] ${message}`);
   }
 
   private setMapControlsEnabled(enabled: boolean): void {
@@ -196,6 +205,7 @@ export class ToolbarView {
     this.scaleSelect.disabled = !enabled;
     this.segmentButton.disabled = !enabled;
     this.polylineButton.disabled = !enabled;
+    this.arcButton.disabled = !enabled;
     this.orthoButton.disabled = !enabled;
     this.roundButton.disabled = !enabled;
     this.clearButton.disabled = !enabled;
