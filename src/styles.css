@@ -67,21 +67,18 @@ body,
   padding: 6px 10px;
 }
 
-.toolbar .map-picker,
-.toolbar .scale-picker {
+.toolbar .map-picker {
   position: relative;
   z-index: 60;
 }
 
-.toolbar .btn-map-picker,
-.toolbar .btn-scale-picker {
+.toolbar .btn-map-picker {
   position: relative;
   min-width: 78px;
   padding: 6px 28px 6px 10px;
 }
 
-.toolbar .btn-map-picker::after,
-.toolbar .btn-scale-picker::after {
+.toolbar .btn-map-picker::after {
   content: "";
   position: absolute;
   right: 12px;
@@ -94,15 +91,13 @@ body,
   transform: translateY(-35%);
 }
 
-.toolbar .btn-map-picker.active,
-.toolbar .btn-scale-picker.active {
+.toolbar .btn-map-picker.active {
   background: #f1f5f9;
   color: #0f172a;
   border-color: #64748b;
 }
 
-.toolbar .map-menu,
-.toolbar .scale-menu {
+.toolbar .map-menu {
   position: absolute;
   top: calc(100% + 8px);
   left: 0;
@@ -119,18 +114,11 @@ body,
   z-index: 1000;
 }
 
-.toolbar .map-menu.open,
-.toolbar .scale-menu.open {
+.toolbar .map-menu.open {
   display: block;
 }
 
-.toolbar .scale-menu {
-  min-width: 96px;
-  max-width: 120px;
-}
-
-.toolbar .map-menu-item,
-.toolbar .scale-menu-item {
+.toolbar .map-menu-item {
   width: 100%;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -144,14 +132,12 @@ body,
   line-height: 1.25;
 }
 
-.toolbar .map-menu-item:hover,
-.toolbar .scale-menu-item:hover {
+.toolbar .map-menu-item:hover {
   border-color: #94a3b8;
   background: #f8fafc;
 }
 
-.toolbar .map-menu-item.active,
-.toolbar .scale-menu-item.active {
+.toolbar .map-menu-item.active {
   border-color: #64748b;
   background: #e2e8f0;
   color: #0f172a;

@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "sync:maps": "node scripts/sync-maps-scaled.mjs",
+    "dev": "npm run sync:maps && vite",
+    "build": "npm run sync:maps && tsc --noEmit && vite build",
     "preview": "vite preview",
-    "maps:generate-scales": "node scripts/generate-scaled-maps.mjs",
     "test": "vitest run --globals",
     "test:watch": "vitest --globals"
   },

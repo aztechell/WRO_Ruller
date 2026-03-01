@@ -2,3 +2,15 @@ node_modules/
 dist/
 .DS_Store
 *.log
+
+# Local/dev outputs
+.vite/
+coverage/
+*.tsbuildinfo
+tmp-*.png
+tmp-*.jpg
+
+# Generated map outputs (synced from source maps)
+public/maps_scaled/
+public/maps/scaled/
+maps_scaled/config.txt

@@ -9,7 +9,7 @@ import {
 import { parseSession, serializeSession } from "../io/session";
 import { CanvasRenderer } from "../render/canvasRenderer";
 import { AppStore } from "../state/store";
-import type { DrawMode, ScalePercent, ViewState } from "../state/types";
+import type { DrawMode, ViewState } from "../state/types";
 import { ToolbarView } from "../ui/toolbar";
 
 const INITIAL_FIT_FACTOR = 0.9;
@@ -34,7 +34,6 @@ export class App {
 
   private inputController: InputController | null = null;
   private renderHandle: number | null = null;
-  private currentScalePercent: ScalePercent = 25;
   private mapLoadRequestId = 0;
 
   constructor(root: HTMLElement) {
@@ -82,7 +81,6 @@ export class App {
     this.renderer = new CanvasRenderer(this.canvas);
     this.toolbar = new ToolbarView(toolbarHost, {
       onMapChange: (mapId) => this.handleMapChange(mapId),
-      onScaleChange: (scalePercent) => this.handleScaleChange(scalePercent),
       onModeChange: (mode) => this.handleModeChange(mode),
       onOrthoToggle: (enabled) => this.handleOrthoToggle(enabled),
       onRoundTo10Toggle: (enabled) => this.handleRoundTo10Toggle(enabled),
@@ -112,7 +110,6 @@ export class App {
   async start(): Promise<void> {
     this.resizeObserver.observe(this.stage);
     this.handleResize();
-    this.toolbar.setScale(this.currentScalePercent);
 
     this.inputController = new InputController({
       canvas: this.canvas,
@@ -130,7 +127,7 @@ export class App {
   private async loadManifestAndActivateMap(preferredMapId: string | null = null): Promise<void> {
     const requestId = this.mapLoadRequestId + 1;
     this.mapLoadRequestId = requestId;
-    this.setLoadingState(true, `Loading maps (${this.currentScalePercent}%)...`);
+    this.setLoadingState(true, "Loading maps...");
 
     try {
       const manifest = await loadMapManifest(this.configUrl);
@@ -144,7 +141,6 @@ export class App {
         this.mapManifestById.set(entry.id, entry);
       }
       this.toolbar.setMaps(this.mapManifestOrder, null);
-      this.toolbar.setScale(this.currentScalePercent);
 
       for (const warning of manifest.warnings) {
         console.warn(`[WRO Ruler] ${warning}`);
@@ -175,11 +171,11 @@ export class App {
 
       if (warningCount > 0) {
         this.toolbar.setStatus(
-          `Loaded ${this.mapManifestOrder.length} map(s) at ${this.currentScalePercent}%, ${warningCount} warning(s)`,
+          `Loaded ${this.mapManifestOrder.length} map(s), ${warningCount} warning(s)`,
           "warn",
         );
       } else {
-        this.toolbar.setStatus(`Loaded ${this.mapManifestOrder.length} map(s) at ${this.currentScalePercent}%`, "info");
+        this.toolbar.setStatus(`Loaded ${this.mapManifestOrder.length} map(s)`, "info");
       }
     } catch (error) {
       if (requestId !== this.mapLoadRequestId) {
@@ -203,7 +199,7 @@ export class App {
 
     const requestId = this.mapLoadRequestId + 1;
     this.mapLoadRequestId = requestId;
-    this.setLoadingState(true, `Loading ${entry.filename} (${this.currentScalePercent}%)...`);
+    this.setLoadingState(true, `Loading ${entry.filename}...`);
 
     try {
       const loaded = await this.loadActiveMapById(mapId, requestId);
@@ -244,9 +240,7 @@ export class App {
       };
     }
 
-    const loaded = await loadMapByEntry(entry, this.configUrl, {
-      scalePercent: this.currentScalePercent,
-    });
+    const loaded = await loadMapByEntry(entry, this.configUrl);
     if (requestId !== this.mapLoadRequestId) {
       return {
         map: null,
@@ -307,17 +301,6 @@ export class App {
   private handleRobotSizeChange(widthMm: number, heightMm: number): void {
     this.store.setRobotSize(widthMm, heightMm);
     this.toolbar.setStatus(`Robot size ${Math.round(widthMm)} x ${Math.round(heightMm)} mm`, "info");
-    this.canvas.focus();
-  }
-
-  private handleScaleChange(scalePercent: ScalePercent): void {
-    if (this.currentScalePercent === scalePercent) {
-      return;
-    }
-    const preferredMapId = this.store.getState().activeMapId;
-    this.currentScalePercent = scalePercent;
-    this.toolbar.setStatus(`Loading ${scalePercent}% maps...`, "info");
-    void this.loadManifestAndActivateMap(preferredMapId);
     this.canvas.focus();
   }
 

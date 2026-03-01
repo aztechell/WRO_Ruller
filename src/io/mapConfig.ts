@@ -1,4 +1,4 @@
-import type { MapSpec, ScalePercent } from "../state/types";
+import type { MapSpec } from "../state/types";
 
 export interface MapConfigEntry {
   filename: string;
@@ -40,10 +40,6 @@ export interface LoadMapManifestResult {
 export interface LoadMapByEntryResult {
   map: LoadedMap | null;
   warnings: string[];
-}
-
-export interface LoadMapsOptions {
-  scalePercent: ScalePercent;
 }
 
 export function parseMapConfig(text: string): ParseMapConfigResult {
@@ -202,11 +198,10 @@ export async function loadMapManifest(configUrl = "/maps/config.txt"): Promise<L
 export async function loadMapByEntry(
   entry: MapManifestEntry,
   configUrl: string,
-  options: LoadMapsOptions = { scalePercent: 25 },
 ): Promise<LoadMapByEntryResult> {
   const warnings: string[] = [];
   const baseUrl = new URL(configUrl, window.location.href);
-  const scaledUrl = new URL(`scaled/${options.scalePercent}/${entry.filename}`, baseUrl).toString();
+  const scaledUrl = new URL(`../maps_scaled/${entry.filename}`, baseUrl).toString();
   const originalUrl = new URL(entry.filename, baseUrl).toString();
 
   let image: HTMLImageElement;
@@ -217,7 +212,7 @@ export async function loadMapByEntry(
     } catch {
       image = await loadImage(originalUrl);
       usedUrl = originalUrl;
-      warnings.push(`${entry.filename} scaled ${options.scalePercent}% missing, fallback to original`);
+      warnings.push(`${entry.filename} missing in /maps_scaled, fallback to /maps`);
     }
   } catch {
     warnings.push(`${entry.filename} ignored (image load failed)`);
@@ -240,7 +235,6 @@ export async function loadMapByEntry(
       spec: {
         id: entry.id,
         filename: entry.filename,
-        scalePercent: options.scalePercent,
         realWidthMm: entry.realWidthMm,
         realHeightMm: entry.realHeightMm,
         imgWidthPx: image.naturalWidth,
@@ -256,14 +250,13 @@ export async function loadMapByEntry(
 // Legacy helper: loads all map images. Prefer loadMapManifest + loadMapByEntry for better memory behavior.
 export async function loadMapsFromConfig(
   configUrl = "/maps/config.txt",
-  options: LoadMapsOptions = { scalePercent: 25 },
 ): Promise<LoadMapsResult> {
   const manifest = await loadMapManifest(configUrl);
   const maps: LoadedMap[] = [];
   const warnings = [...manifest.warnings];
 
   for (const entry of manifest.maps) {
-    const loaded = await loadMapByEntry(entry, configUrl, options);
+    const loaded = await loadMapByEntry(entry, configUrl);
     warnings.push(...loaded.warnings);
     if (loaded.map) {
       maps.push(loaded.map);

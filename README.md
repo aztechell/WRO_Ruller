@@ -5,7 +5,7 @@ Static browser version of the WRO map ruler tool, designed for GitHub Pages.
 ## Features
 
 - Loads map list from `public/maps/config.txt`
-- Map scale selector: `25%`, `50%`, `75%`, `100%` (default `25%`)
+- Fixed map scale: `25%`
 - Segment and polyline measurement modes
 - Distance labels in millimeters
 - Polyline interior angle labels
@@ -32,8 +32,9 @@ Map lines remain:
 ## Project layout
 
 ```text
-public/maps/         # map PNGs + config.txt
-public/maps/scaled/  # generated scaled PNG maps
+maps_scaled/         # source 25% PNG maps (project root)
+public/maps/         # map config.txt
+public/maps_scaled/  # served 25% PNG maps (synced from maps_scaled/)
 src/                 # app code
 scripts/             # utility scripts
 tests/               # vitest unit tests
@@ -50,7 +51,6 @@ Commands:
 
 ```bash
 npm install
-npm run maps:generate-scales
 npm run dev
 ```
 
