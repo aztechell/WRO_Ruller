@@ -6,6 +6,13 @@ export interface MapConfigEntry {
   realHeightMm: number;
 }
 
+export interface MapManifestEntry {
+  id: string;
+  filename: string;
+  realWidthMm: number;
+  realHeightMm: number;
+}
+
 export interface ParseMapConfigResult {
   entries: MapConfigEntry[];
   defaultFilename: string | null;
@@ -21,6 +28,17 @@ export interface LoadedMap {
 export interface LoadMapsResult {
   maps: LoadedMap[];
   defaultMapId: string | null;
+  warnings: string[];
+}
+
+export interface LoadMapManifestResult {
+  maps: MapManifestEntry[];
+  defaultMapId: string | null;
+  warnings: string[];
+}
+
+export interface LoadMapByEntryResult {
+  map: LoadedMap | null;
   warnings: string[];
 }
 
@@ -81,10 +99,47 @@ export function parseMapConfig(text: string): ParseMapConfigResult {
   return { entries, defaultFilename, warnings };
 }
 
+function normalizePath(value: string): string {
+  return value.replace(/\\/g, "/");
+}
+
+function normalizePathLower(value: string): string {
+  return normalizePath(value).toLowerCase();
+}
+
 function normalizeMapId(filename: string): string {
-  const normalized = filename.replace(/\\/g, "/");
+  const normalized = normalizePath(filename);
   const basename = normalized.slice(normalized.lastIndexOf("/") + 1);
   return basename.replace(/\.[^.]+$/, "");
+}
+
+function buildManifest(entries: MapConfigEntry[]): MapManifestEntry[] {
+  const idCounts = new Map<string, number>();
+  const manifest: MapManifestEntry[] = [];
+
+  for (const entry of entries) {
+    const rawId = normalizeMapId(entry.filename);
+    const seenCount = idCounts.get(rawId) ?? 0;
+    idCounts.set(rawId, seenCount + 1);
+    const id = seenCount === 0 ? rawId : `${rawId}_${seenCount + 1}`;
+    manifest.push({
+      id,
+      filename: entry.filename,
+      realWidthMm: entry.realWidthMm,
+      realHeightMm: entry.realHeightMm,
+    });
+  }
+
+  return manifest;
+}
+
+function resolveDefaultMapId(defaultFilename: string | null, maps: MapManifestEntry[]): string | null {
+  if (!defaultFilename) {
+    return null;
+  }
+  const target = normalizePathLower(defaultFilename);
+  const matched = maps.find((map) => normalizePathLower(map.filename) === target);
+  return matched?.id ?? null;
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -96,92 +151,128 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-export async function loadMapsFromConfig(
-  configUrl = "/maps/config.txt",
-  options: LoadMapsOptions = { scalePercent: 25 },
-): Promise<LoadMapsResult> {
-  const { scalePercent } = options;
-  const warnings: string[] = [];
-  let configText = "";
+async function fetchConfigText(configUrl: string): Promise<{ text: string | null; warnings: string[] }> {
   try {
     const response = await fetch(configUrl, { cache: "no-cache" });
     if (!response.ok) {
       return {
-        maps: [],
-        defaultMapId: null,
+        text: null,
         warnings: [`Failed to load ${configUrl} (HTTP ${response.status})`],
       };
     }
-    configText = await response.text();
+    return {
+      text: await response.text(),
+      warnings: [],
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
-      maps: [],
-      defaultMapId: null,
+      text: null,
       warnings: [`Failed to load ${configUrl}: ${message}`],
     };
   }
+}
 
-  const parsed = parseMapConfig(configText);
-  warnings.push(...parsed.warnings);
+export async function loadMapManifest(configUrl = "/maps/config.txt"): Promise<LoadMapManifestResult> {
+  const fetched = await fetchConfigText(configUrl);
+  if (!fetched.text) {
+    return {
+      maps: [],
+      defaultMapId: null,
+      warnings: fetched.warnings,
+    };
+  }
 
-  const maps: LoadedMap[] = [];
-  const idCounts = new Map<string, number>();
+  const parsed = parseMapConfig(fetched.text);
+  const maps = buildManifest(parsed.entries);
+  const defaultMapId = resolveDefaultMapId(parsed.defaultFilename, maps);
+  const warnings = [...fetched.warnings, ...parsed.warnings];
+
+  if (parsed.defaultFilename && !defaultMapId) {
+    warnings.push(`default map "${parsed.defaultFilename}" not found among configured maps`);
+  }
+
+  return {
+    maps,
+    defaultMapId,
+    warnings,
+  };
+}
+
+export async function loadMapByEntry(
+  entry: MapManifestEntry,
+  configUrl: string,
+  options: LoadMapsOptions = { scalePercent: 25 },
+): Promise<LoadMapByEntryResult> {
+  const warnings: string[] = [];
   const baseUrl = new URL(configUrl, window.location.href);
-  const normalizedScale = String(scalePercent);
+  const scaledUrl = new URL(`scaled/${options.scalePercent}/${entry.filename}`, baseUrl).toString();
+  const originalUrl = new URL(entry.filename, baseUrl).toString();
 
-  for (const entry of parsed.entries) {
-    const originalUrl = new URL(entry.filename, baseUrl).toString();
-    const scaledUrl = new URL(`scaled/${normalizedScale}/${entry.filename}`, baseUrl).toString();
-    let imageUrl = scaledUrl;
+  let image: HTMLImageElement;
+  let usedUrl = scaledUrl;
+  try {
     try {
-      let image: HTMLImageElement;
-      try {
-        image = await loadImage(scaledUrl);
-      } catch {
-        image = await loadImage(originalUrl);
-        warnings.push(`${entry.filename} scaled ${scalePercent}% missing, fallback to original`);
-        imageUrl = originalUrl;
-      }
-      if (image.naturalWidth <= 0 || image.naturalHeight <= 0) {
-        warnings.push(`${entry.filename} ignored (invalid image dimensions)`);
-        continue;
-      }
-      const rawId = normalizeMapId(entry.filename);
-      const seenCount = idCounts.get(rawId) ?? 0;
-      idCounts.set(rawId, seenCount + 1);
-      const baseId = seenCount === 0 ? rawId : `${rawId}_${seenCount + 1}`;
-      const id = `${baseId}@${scalePercent}`;
-
-      maps.push({
-        spec: {
-          id,
-          filename: entry.filename,
-          scalePercent,
-          realWidthMm: entry.realWidthMm,
-          realHeightMm: entry.realHeightMm,
-          imgWidthPx: image.naturalWidth,
-          imgHeightPx: image.naturalHeight,
-        },
-        image,
-        url: imageUrl,
-      });
+      image = await loadImage(scaledUrl);
     } catch {
-      warnings.push(`${entry.filename} ignored (image load failed)`);
+      image = await loadImage(originalUrl);
+      usedUrl = originalUrl;
+      warnings.push(`${entry.filename} scaled ${options.scalePercent}% missing, fallback to original`);
+    }
+  } catch {
+    warnings.push(`${entry.filename} ignored (image load failed)`);
+    return {
+      map: null,
+      warnings,
+    };
+  }
+
+  if (image.naturalWidth <= 0 || image.naturalHeight <= 0) {
+    warnings.push(`${entry.filename} ignored (invalid image dimensions)`);
+    return {
+      map: null,
+      warnings,
+    };
+  }
+
+  return {
+    map: {
+      spec: {
+        id: entry.id,
+        filename: entry.filename,
+        scalePercent: options.scalePercent,
+        realWidthMm: entry.realWidthMm,
+        realHeightMm: entry.realHeightMm,
+        imgWidthPx: image.naturalWidth,
+        imgHeightPx: image.naturalHeight,
+      },
+      image,
+      url: usedUrl,
+    },
+    warnings,
+  };
+}
+
+// Legacy helper: loads all map images. Prefer loadMapManifest + loadMapByEntry for better memory behavior.
+export async function loadMapsFromConfig(
+  configUrl = "/maps/config.txt",
+  options: LoadMapsOptions = { scalePercent: 25 },
+): Promise<LoadMapsResult> {
+  const manifest = await loadMapManifest(configUrl);
+  const maps: LoadedMap[] = [];
+  const warnings = [...manifest.warnings];
+
+  for (const entry of manifest.maps) {
+    const loaded = await loadMapByEntry(entry, configUrl, options);
+    warnings.push(...loaded.warnings);
+    if (loaded.map) {
+      maps.push(loaded.map);
     }
   }
 
-  let defaultMapId: string | null = null;
-  if (parsed.defaultFilename) {
-    const normalize = (value: string): string => value.replace(/\\/g, "/").toLowerCase();
-    const target = normalize(parsed.defaultFilename);
-    const matched = maps.find((map) => normalize(map.spec.filename) === target);
-    if (matched) {
-      defaultMapId = matched.spec.id;
-    } else {
-      warnings.push(`default map "${parsed.defaultFilename}" not found among loaded maps`);
-    }
-  }
-
-  return { maps, defaultMapId, warnings };
+  return {
+    maps,
+    defaultMapId: manifest.defaultMapId,
+    warnings,
+  };
 }

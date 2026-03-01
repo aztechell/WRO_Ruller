@@ -1,4 +1,9 @@
-import type { DrawMode, MapSpec, ScalePercent } from "../state/types";
+import type { DrawMode, ScalePercent } from "../state/types";
+
+export interface MapSelectorOption {
+  id: string;
+  filename: string;
+}
 
 export type StatusKind = "info" | "warn" | "error";
 
@@ -36,7 +41,7 @@ export class ToolbarView {
     this.root.className = "toolbar";
     host.appendChild(this.root);
 
-    const mapGroup = this.createGroup();
+    const mapGroup = this.createGroup("toolbar-group toolbar-group--map");
     const mapLabel = document.createElement("label");
     mapLabel.textContent = "Map";
     this.mapSelect = document.createElement("select");
@@ -45,7 +50,7 @@ export class ToolbarView {
     });
     mapGroup.append(mapLabel, this.mapSelect);
 
-    const scaleGroup = this.createGroup();
+    const scaleGroup = this.createGroup("toolbar-group toolbar-group--scale");
     const scaleLabel = document.createElement("label");
     scaleLabel.textContent = "Scale";
     this.scaleSelect = document.createElement("select");
@@ -61,18 +66,27 @@ export class ToolbarView {
     });
     scaleGroup.append(scaleLabel, this.scaleSelect);
 
-    const modeGroup = this.createGroup();
-    const modeLabel = document.createElement("label");
-    modeLabel.textContent = "Mode";
+    const drawGroup = this.createGroup("toolbar-group toolbar-group--draw");
+    const drawLabel = document.createElement("label");
+    drawLabel.textContent = "Draw";
     this.segmentButton = document.createElement("button");
+    this.segmentButton.className = "btn-mode";
     this.segmentButton.textContent = "Segment";
     this.segmentButton.type = "button";
     this.segmentButton.addEventListener("click", () => this.callbacks.onModeChange("segment"));
     this.polylineButton = document.createElement("button");
+    this.polylineButton.className = "btn-mode";
     this.polylineButton.textContent = "Polyline";
     this.polylineButton.type = "button";
     this.polylineButton.addEventListener("click", () => this.callbacks.onModeChange("polyline"));
+
+    drawGroup.append(drawLabel, this.segmentButton, this.polylineButton);
+
+    const assistGroup = this.createGroup("toolbar-group toolbar-group--assist");
+    const assistLabel = document.createElement("label");
+    assistLabel.textContent = "Assist";
     this.orthoButton = document.createElement("button");
+    this.orthoButton.className = "btn-toggle";
     this.orthoButton.textContent = "Ortho (V/H)";
     this.orthoButton.type = "button";
     this.orthoButton.addEventListener("click", () => {
@@ -80,25 +94,31 @@ export class ToolbarView {
       this.callbacks.onOrthoToggle(next);
     });
     this.roundButton = document.createElement("button");
+    this.roundButton.className = "btn-toggle";
     this.roundButton.textContent = "Round 10 mm";
     this.roundButton.type = "button";
     this.roundButton.addEventListener("click", () => {
       const next = !this.roundButton.classList.contains("active");
       this.callbacks.onRoundTo10Toggle(next);
     });
-    modeGroup.append(
-      modeLabel,
-      this.segmentButton,
-      this.polylineButton,
-      this.orthoButton,
-      this.roundButton,
-    );
+    assistGroup.append(assistLabel, this.orthoButton, this.roundButton);
 
-    const actionGroup = this.createGroup();
-    this.clearButton = this.createButton("Clear All", () => this.callbacks.onClearAll());
-    this.exportButton = this.createButton("Export PNG", () => this.callbacks.onExportPng());
-    this.saveButton = this.createButton("Save JSON", () => this.callbacks.onSaveSession());
-    this.loadButton = this.createButton("Load JSON", () => this.loadInput.click());
+    const actionGroup = this.createGroup("toolbar-group toolbar-group--actions");
+    const actionLabel = document.createElement("label");
+    actionLabel.textContent = "Actions";
+    this.clearButton = this.createButton("Clear All", () => this.callbacks.onClearAll(), "btn-action btn-danger");
+    this.exportButton = this.createButton(
+      "Export PNG",
+      () => this.callbacks.onExportPng(),
+      "btn-action btn-neutral",
+    );
+    this.saveButton = this.createButton(
+      "Save JSON",
+      () => this.callbacks.onSaveSession(),
+      "btn-action btn-neutral",
+    );
+    this.loadButton = this.createButton("Load JSON", () => this.loadInput.click(), "btn-action btn-neutral");
+    actionGroup.append(actionLabel);
     actionGroup.append(this.clearButton, this.exportButton, this.saveButton, this.loadButton);
 
     this.loadInput = document.createElement("input");
@@ -124,7 +144,7 @@ export class ToolbarView {
     this.setMapControlsEnabled(false);
   }
 
-  setMaps(maps: MapSpec[], activeMapId: string | null): void {
+  setMaps(maps: MapSelectorOption[], activeMapId: string | null): void {
     this.mapSelect.innerHTML = "";
     for (const map of maps) {
       const option = document.createElement("option");
@@ -184,16 +204,19 @@ export class ToolbarView {
     this.loadButton.disabled = !enabled;
   }
 
-  private createGroup(): HTMLDivElement {
+  private createGroup(className = "toolbar-group"): HTMLDivElement {
     const group = document.createElement("div");
-    group.className = "toolbar-group";
+    group.className = className;
     this.root.appendChild(group);
     return group;
   }
 
-  private createButton(text: string, onClick: () => void): HTMLButtonElement {
+  private createButton(text: string, onClick: () => void, className = ""): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
+    if (className) {
+      button.className = className;
+    }
     button.textContent = text;
     button.addEventListener("click", onClick);
     return button;

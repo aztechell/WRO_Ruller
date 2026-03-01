@@ -41,6 +41,14 @@ body,
   gap: 6px;
 }
 
+.toolbar-group--draw,
+.toolbar-group--assist,
+.toolbar-group--actions {
+  padding-left: 10px;
+  margin-left: 2px;
+  border-left: 1px dashed #cbd5e1;
+}
+
 .toolbar label {
   font-size: 13px;
   color: #334155;
@@ -68,6 +76,53 @@ body,
   background: #0f172a;
   color: #f8fafc;
   border-color: #0f172a;
+}
+
+.toolbar button.btn-mode {
+  border-color: #94a3b8;
+  background: #ffffff;
+}
+
+.toolbar button.btn-mode.active {
+  background: #0f172a;
+  color: #f8fafc;
+  border-color: #0f172a;
+}
+
+.toolbar button.btn-toggle {
+  border-color: #92400e;
+  color: #78350f;
+  background: #fff7ed;
+}
+
+.toolbar button.btn-toggle:hover {
+  border-color: #78350f;
+}
+
+.toolbar button.btn-toggle.active {
+  background: #78350f;
+  border-color: #78350f;
+  color: #fff7ed;
+}
+
+.toolbar button.btn-action.btn-neutral {
+  border-color: #64748b;
+  color: #1e293b;
+  background: #f8fafc;
+}
+
+.toolbar button.btn-action.btn-neutral:hover {
+  border-color: #334155;
+}
+
+.toolbar button.btn-action.btn-danger {
+  border-color: #b91c1c;
+  color: #991b1b;
+  background: #fef2f2;
+}
+
+.toolbar button.btn-action.btn-danger:hover {
+  border-color: #991b1b;
 }
 
 .toolbar .status {

@@ -141,6 +141,70 @@ export class AppStore {
     this.emit();
   }
 
+  updateSegmentEndpoint(segmentId: string, endpoint: PointPx): boolean {
+    const mapId = this.state.activeMapId;
+    if (!mapId) {
+      return false;
+    }
+    this.ensureMapBuckets(mapId);
+    const segments = this.state.segmentsByMap[mapId];
+    const segment = segments.find((item) => item.id === segmentId);
+    if (!segment) {
+      return false;
+    }
+    segment.b = clonePoint(endpoint);
+    this.emit();
+    return true;
+  }
+
+  updatePolylinePoint(polylineId: string, pointIndex: number, point: PointPx): boolean {
+    const mapId = this.state.activeMapId;
+    if (!mapId) {
+      return false;
+    }
+    this.ensureMapBuckets(mapId);
+    const polylines = this.state.polylinesByMap[mapId];
+    const polyline = polylines.find((item) => item.id === polylineId);
+    if (!polyline || pointIndex < 0 || pointIndex >= polyline.points.length) {
+      return false;
+    }
+    polyline.points[pointIndex] = clonePoint(point);
+    this.emit();
+    return true;
+  }
+
+  deleteSegmentById(segmentId: string): boolean {
+    const mapId = this.state.activeMapId;
+    if (!mapId) {
+      return false;
+    }
+    this.ensureMapBuckets(mapId);
+    const segments = this.state.segmentsByMap[mapId];
+    const nextSegments = segments.filter((item) => item.id !== segmentId);
+    if (nextSegments.length === segments.length) {
+      return false;
+    }
+    this.state.segmentsByMap[mapId] = nextSegments;
+    this.emit();
+    return true;
+  }
+
+  deletePolylineById(polylineId: string): boolean {
+    const mapId = this.state.activeMapId;
+    if (!mapId) {
+      return false;
+    }
+    this.ensureMapBuckets(mapId);
+    const polylines = this.state.polylinesByMap[mapId];
+    const nextPolylines = polylines.filter((item) => item.id !== polylineId);
+    if (nextPolylines.length === polylines.length) {
+      return false;
+    }
+    this.state.polylinesByMap[mapId] = nextPolylines;
+    this.emit();
+    return true;
+  }
+
   startSegment(point: PointPx): void {
     this.state.inProgress.segmentStart = clonePoint(point);
     this.emit();

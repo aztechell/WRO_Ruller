@@ -1,10 +1,15 @@
 import { screenToWorld } from "../geometry/measure";
 import { InputController } from "../input/controller";
-import { loadMapsFromConfig, type LoadedMap } from "../io/mapConfig";
+import {
+  loadMapByEntry,
+  loadMapManifest,
+  type LoadedMap,
+  type MapManifestEntry,
+} from "../io/mapConfig";
 import { parseSession, serializeSession } from "../io/session";
 import { CanvasRenderer } from "../render/canvasRenderer";
 import { AppStore } from "../state/store";
-import type { DrawMode, MapSpec, ScalePercent, ViewState } from "../state/types";
+import type { DrawMode, ScalePercent, ViewState } from "../state/types";
 import { ToolbarView } from "../ui/toolbar";
 
 const INITIAL_FIT_FACTOR = 0.9;
@@ -19,8 +24,12 @@ export class App {
   private readonly toolbar: ToolbarView;
   private readonly renderer: CanvasRenderer;
   private readonly store = new AppStore();
-  private readonly mapsById = new Map<string, LoadedMap>();
   private readonly resizeObserver: ResizeObserver;
+
+  private readonly mapManifestById = new Map<string, MapManifestEntry>();
+  private mapManifestOrder: MapManifestEntry[] = [];
+  private activeLoadedMap: LoadedMap | null = null;
+  private readonly configUrl: string;
 
   private inputController: InputController | null = null;
   private renderHandle: number | null = null;
@@ -30,6 +39,7 @@ export class App {
   constructor(root: HTMLElement) {
     this.root = root;
     this.root.className = "app-root";
+    this.configUrl = `${import.meta.env.BASE_URL}maps/config.txt`;
 
     const toolbarHost = document.createElement("div");
     this.stage = document.createElement("div");
@@ -90,56 +100,64 @@ export class App {
       requestRender: () => this.scheduleRender(),
     });
 
-    await this.loadMaps();
+    await this.loadManifestAndActivateMap();
     this.scheduleRender();
   }
 
-  private async loadMaps(preferredFilename: string | null = null): Promise<void> {
+  private async loadManifestAndActivateMap(preferredMapId: string | null = null): Promise<void> {
     const requestId = this.mapLoadRequestId + 1;
     this.mapLoadRequestId = requestId;
     this.setLoadingState(true, `Loading maps (${this.currentScalePercent}%)...`);
-    const configUrl = `${import.meta.env.BASE_URL}maps/config.txt`;
+
     try {
-      const { maps, defaultMapId, warnings } = await loadMapsFromConfig(configUrl, {
-        scalePercent: this.currentScalePercent,
-      });
+      const manifest = await loadMapManifest(this.configUrl);
       if (requestId !== this.mapLoadRequestId) {
         return;
       }
-      this.mapsById.clear();
-      for (const map of maps) {
-        this.mapsById.set(map.spec.id, map);
-      }
 
-      const mapSpecs = this.getMapSpecs();
-      const startupMap = this.pickStartupMap(maps, defaultMapId, preferredFilename);
-      this.toolbar.setMaps(mapSpecs, startupMap?.spec.id ?? null);
+      this.mapManifestById.clear();
+      this.mapManifestOrder = manifest.maps;
+      for (const entry of manifest.maps) {
+        this.mapManifestById.set(entry.id, entry);
+      }
+      this.toolbar.setMaps(this.mapManifestOrder, null);
       this.toolbar.setScale(this.currentScalePercent);
 
-      if (warnings.length > 0) {
-        for (const warning of warnings) {
-          console.warn(`[WRO Ruler] ${warning}`);
-        }
+      for (const warning of manifest.warnings) {
+        console.warn(`[WRO Ruler] ${warning}`);
       }
 
-      if (!startupMap) {
+      const targetMapId = this.pickStartupMapId(preferredMapId, manifest.defaultMapId);
+      if (!targetMapId) {
+        this.activeLoadedMap = null;
+        this.store.setActiveMap(null);
         this.toolbar.setStatus("No valid maps loaded", "warn");
         return;
       }
 
-      this.store.setActiveMap(startupMap.spec.id);
-      this.fitViewToMap(startupMap);
-      this.canvas.focus();
-
-      if (warnings.length > 0) {
-        this.toolbar.setStatus(
-          `Loaded ${maps.length} map(s) at ${this.currentScalePercent}%, ${warnings.length} warning(s)`,
-          "warn",
-        );
+      const loaded = await this.loadActiveMapById(targetMapId, requestId);
+      if (requestId !== this.mapLoadRequestId) {
         return;
       }
 
-      this.toolbar.setStatus(`Loaded ${maps.length} map(s) at ${this.currentScalePercent}%`, "info");
+      const warningCount = manifest.warnings.length + loaded.warnings.length;
+      for (const warning of loaded.warnings) {
+        console.warn(`[WRO Ruler] ${warning}`);
+      }
+
+      if (!loaded.map) {
+        this.toolbar.setStatus(`Failed to load "${targetMapId}"`, "error");
+        return;
+      }
+
+      if (warningCount > 0) {
+        this.toolbar.setStatus(
+          `Loaded ${this.mapManifestOrder.length} map(s) at ${this.currentScalePercent}%, ${warningCount} warning(s)`,
+          "warn",
+        );
+      } else {
+        this.toolbar.setStatus(`Loaded ${this.mapManifestOrder.length} map(s) at ${this.currentScalePercent}%`, "info");
+      }
     } catch (error) {
       if (requestId !== this.mapLoadRequestId) {
         return;
@@ -153,36 +171,90 @@ export class App {
     }
   }
 
-  private pickStartupMap(
-    maps: LoadedMap[],
-    defaultMapId: string | null,
-    preferredFilename: string | null,
-  ): LoadedMap | null {
-    if (maps.length === 0) {
-      return null;
+  private async activateSingleMap(mapId: string, statusPrefix: string): Promise<void> {
+    const entry = this.mapManifestById.get(mapId);
+    if (!entry) {
+      this.toolbar.setStatus(`Unknown map "${mapId}"`, "error");
+      return;
     }
-    if (preferredFilename) {
-      const preferred = maps.find((map) => map.spec.filename === preferredFilename);
-      if (preferred) {
-        return preferred;
+
+    const requestId = this.mapLoadRequestId + 1;
+    this.mapLoadRequestId = requestId;
+    this.setLoadingState(true, `Loading ${entry.filename} (${this.currentScalePercent}%)...`);
+
+    try {
+      const loaded = await this.loadActiveMapById(mapId, requestId);
+      if (requestId !== this.mapLoadRequestId) {
+        return;
+      }
+
+      for (const warning of loaded.warnings) {
+        console.warn(`[WRO Ruler] ${warning}`);
+      }
+
+      if (!loaded.map) {
+        this.toolbar.setStatus(`Failed to load ${entry.filename}`, "error");
+        return;
+      }
+
+      if (loaded.warnings.length > 0) {
+        this.toolbar.setStatus(`${statusPrefix} with ${loaded.warnings.length} warning(s)`, "warn");
+      } else {
+        this.toolbar.setStatus(statusPrefix, "info");
+      }
+    } finally {
+      if (requestId === this.mapLoadRequestId) {
+        this.setLoadingState(false);
       }
     }
-    if (!defaultMapId) {
-      return maps[0];
-    }
-    return maps.find((map) => map.spec.id === defaultMapId) ?? maps[0];
   }
 
-  private getMapSpecs(): MapSpec[] {
-    return Array.from(this.mapsById.values()).map((map) => map.spec);
+  private async loadActiveMapById(
+    mapId: string,
+    requestId: number,
+  ): Promise<{ map: LoadedMap | null; warnings: string[] }> {
+    const entry = this.mapManifestById.get(mapId);
+    if (!entry) {
+      return {
+        map: null,
+        warnings: [`unknown map id "${mapId}"`],
+      };
+    }
+
+    const loaded = await loadMapByEntry(entry, this.configUrl, {
+      scalePercent: this.currentScalePercent,
+    });
+    if (requestId !== this.mapLoadRequestId) {
+      return {
+        map: null,
+        warnings: loaded.warnings,
+      };
+    }
+
+    this.activeLoadedMap = loaded.map;
+    this.store.setActiveMap(mapId);
+
+    if (loaded.map) {
+      this.fitViewToMap(loaded.map);
+      this.toolbar.setMaps(this.mapManifestOrder, mapId);
+      this.canvas.focus();
+    }
+
+    return loaded;
+  }
+
+  private pickStartupMapId(preferredMapId: string | null, defaultMapId: string | null): string | null {
+    if (preferredMapId && this.mapManifestById.has(preferredMapId)) {
+      return preferredMapId;
+    }
+    if (defaultMapId && this.mapManifestById.has(defaultMapId)) {
+      return defaultMapId;
+    }
+    return this.mapManifestOrder[0]?.id ?? null;
   }
 
   private getActiveMap(): LoadedMap | null {
-    const activeId = this.store.getState().activeMapId;
-    if (!activeId) {
-      return null;
-    }
-    return this.mapsById.get(activeId) ?? null;
+    return this.activeLoadedMap;
   }
 
   private handleModeChange(mode: DrawMode): void {
@@ -206,10 +278,10 @@ export class App {
     if (this.currentScalePercent === scalePercent) {
       return;
     }
-    const preferredFilename = this.getActiveMap()?.spec.filename ?? null;
+    const preferredMapId = this.store.getState().activeMapId;
     this.currentScalePercent = scalePercent;
     this.toolbar.setStatus(`Loading ${scalePercent}% maps...`, "info");
-    void this.loadMaps(preferredFilename);
+    void this.loadManifestAndActivateMap(preferredMapId);
     this.canvas.focus();
   }
 
@@ -220,15 +292,7 @@ export class App {
   }
 
   private handleMapChange(mapId: string): void {
-    const map = this.mapsById.get(mapId);
-    if (!map) {
-      this.toolbar.setStatus(`Unknown map "${mapId}"`, "error");
-      return;
-    }
-    this.store.setActiveMap(mapId);
-    this.fitViewToMap(map);
-    this.toolbar.setStatus(`Switched to ${map.spec.filename}`, "info");
-    this.canvas.focus();
+    void this.activateSingleMap(mapId, `Switched to ${this.mapManifestById.get(mapId)?.filename ?? mapId}`);
   }
 
   private handleClearAll(): void {
@@ -242,7 +306,7 @@ export class App {
   }
 
   private handleExportPng(): void {
-    if (!this.store.getState().activeMapId) {
+    if (!this.store.getState().activeMapId || !this.activeLoadedMap) {
       this.toolbar.setStatus("No active map to export", "warn");
       return;
     }
@@ -267,7 +331,8 @@ export class App {
   }
 
   private handleLoadSession(jsonText: string): void {
-    const { session, warnings } = parseSession(jsonText, new Set(this.mapsById.keys()));
+    const availableIds = new Set(this.mapManifestOrder.map((map) => map.id));
+    const { session, warnings } = parseSession(jsonText, availableIds);
     if (!session) {
       const message = warnings[0] ?? "Session load failed";
       this.toolbar.setStatus(message, "error");
@@ -278,12 +343,13 @@ export class App {
       console.warn(`[WRO Ruler] ${warning}`);
     }
 
-    const fallbackMapId = this.store.getState().activeMapId ?? this.getMapSpecs()[0]?.id ?? null;
+    const fallbackMapId = this.store.getState().activeMapId ?? this.mapManifestOrder[0]?.id ?? null;
     this.store.applySession(session, fallbackMapId);
-    const active = this.getActiveMap();
-    if (active) {
-      this.fitViewToMap(active);
+    const activeMapId = this.store.getState().activeMapId;
+    if (activeMapId) {
+      void this.activateSingleMap(activeMapId, "Session loaded");
     }
+
     if (warnings.length > 0) {
       this.toolbar.setStatus(`Session loaded with ${warnings.length} warning(s)`, "warn");
     } else {

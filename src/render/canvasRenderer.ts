@@ -224,7 +224,22 @@ export class CanvasRenderer {
 
   private drawLine(a: PointPx, b: PointPx): void {
     const ctx = this.ctx;
+    const mainStrokeStyle = ctx.strokeStyle;
+    const mainLineWidth = ctx.lineWidth;
+    const outlineLineWidth = mainLineWidth * 1.35;
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.9)";
+    ctx.lineWidth = outlineLineWidth;
     ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.strokeStyle = mainStrokeStyle;
+    ctx.lineWidth = mainLineWidth;
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
     ctx.stroke();
