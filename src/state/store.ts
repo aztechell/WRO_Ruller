@@ -44,6 +44,8 @@ export class AppStore {
   private state: AppState = {
     activeMapId: null,
     mode: "segment",
+    orthoEnabled: false,
+    roundTo10Enabled: false,
     segmentsByMap: {},
     polylinesByMap: {},
     inProgress: {
@@ -89,6 +91,22 @@ export class AppStore {
     }
     this.state.mode = mode;
     this.clearInProgress(false);
+    this.emit();
+  }
+
+  setOrthoEnabled(enabled: boolean): void {
+    if (this.state.orthoEnabled === enabled) {
+      return;
+    }
+    this.state.orthoEnabled = enabled;
+    this.emit();
+  }
+
+  setRoundTo10Enabled(enabled: boolean): void {
+    if (this.state.roundTo10Enabled === enabled) {
+      return;
+    }
+    this.state.roundTo10Enabled = enabled;
     this.emit();
   }
 
@@ -223,6 +241,8 @@ export class AppStore {
     this.state.segmentsByMap = nextSegments;
     this.state.polylinesByMap = nextPolylines;
     this.state.mode = session.ui.mode;
+    this.state.orthoEnabled = Boolean(session.ui.orthoEnabled);
+    this.state.roundTo10Enabled = Boolean(session.ui.roundTo10Enabled);
     this.state.activeMapId = session.activeMapId ?? fallbackMapId;
     if (this.state.activeMapId) {
       this.ensureMapBuckets(this.state.activeMapId);

@@ -6,6 +6,8 @@ export interface ToolbarCallbacks {
   onMapChange: (mapId: string) => void;
   onScaleChange: (scalePercent: ScalePercent) => void;
   onModeChange: (mode: DrawMode) => void;
+  onOrthoToggle: (enabled: boolean) => void;
+  onRoundTo10Toggle: (enabled: boolean) => void;
   onClearAll: () => void;
   onExportPng: () => void;
   onSaveSession: () => void;
@@ -18,6 +20,8 @@ export class ToolbarView {
   private readonly scaleSelect: HTMLSelectElement;
   private readonly segmentButton: HTMLButtonElement;
   private readonly polylineButton: HTMLButtonElement;
+  private readonly orthoButton: HTMLButtonElement;
+  private readonly roundButton: HTMLButtonElement;
   private readonly clearButton: HTMLButtonElement;
   private readonly exportButton: HTMLButtonElement;
   private readonly saveButton: HTMLButtonElement;
@@ -68,7 +72,27 @@ export class ToolbarView {
     this.polylineButton.textContent = "Polyline";
     this.polylineButton.type = "button";
     this.polylineButton.addEventListener("click", () => this.callbacks.onModeChange("polyline"));
-    modeGroup.append(modeLabel, this.segmentButton, this.polylineButton);
+    this.orthoButton = document.createElement("button");
+    this.orthoButton.textContent = "Ortho (V/H)";
+    this.orthoButton.type = "button";
+    this.orthoButton.addEventListener("click", () => {
+      const next = !this.orthoButton.classList.contains("active");
+      this.callbacks.onOrthoToggle(next);
+    });
+    this.roundButton = document.createElement("button");
+    this.roundButton.textContent = "Round 10 mm";
+    this.roundButton.type = "button";
+    this.roundButton.addEventListener("click", () => {
+      const next = !this.roundButton.classList.contains("active");
+      this.callbacks.onRoundTo10Toggle(next);
+    });
+    modeGroup.append(
+      modeLabel,
+      this.segmentButton,
+      this.polylineButton,
+      this.orthoButton,
+      this.roundButton,
+    );
 
     const actionGroup = this.createGroup();
     this.clearButton = this.createButton("Clear All", () => this.callbacks.onClearAll());
@@ -134,6 +158,14 @@ export class ToolbarView {
     this.polylineButton.classList.toggle("active", mode === "polyline");
   }
 
+  setOrthoEnabled(enabled: boolean): void {
+    this.orthoButton.classList.toggle("active", enabled);
+  }
+
+  setRoundTo10Enabled(enabled: boolean): void {
+    this.roundButton.classList.toggle("active", enabled);
+  }
+
   setStatus(message: string, kind: StatusKind = "info"): void {
     this.statusNode.textContent = message;
     this.statusNode.className = `status ${kind}`;
@@ -144,6 +176,8 @@ export class ToolbarView {
     this.scaleSelect.disabled = !enabled;
     this.segmentButton.disabled = !enabled;
     this.polylineButton.disabled = !enabled;
+    this.orthoButton.disabled = !enabled;
+    this.roundButton.disabled = !enabled;
     this.clearButton.disabled = !enabled;
     this.exportButton.disabled = !enabled;
     this.saveButton.disabled = !enabled;

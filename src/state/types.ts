@@ -45,6 +45,8 @@ export interface InProgressState {
 export interface AppState {
   activeMapId: string | null;
   mode: DrawMode;
+  orthoEnabled: boolean;
+  roundTo10Enabled: boolean;
   segmentsByMap: Record<string, Segment[]>;
   polylinesByMap: Record<string, Polyline[]>;
   inProgress: InProgressState;
@@ -63,5 +65,7 @@ export interface SessionV1 {
   maps: SessionMapData[];
   ui: {
     mode: DrawMode;
+    orthoEnabled?: boolean;
+    roundTo10Enabled?: boolean;
   };
 }

@@ -4,6 +4,8 @@ import type { AppState } from "../src/state/types";
 const stateFixture: AppState = {
   activeMapId: "map-a",
   mode: "polyline",
+  orthoEnabled: true,
+  roundTo10Enabled: true,
   segmentsByMap: {
     "map-a": [
       {
@@ -47,6 +49,8 @@ describe("session serialization", () => {
     expect(parsed.session).not.toBeNull();
     expect(parsed.session?.activeMapId).toBe("map-a");
     expect(parsed.session?.ui.mode).toBe("polyline");
+    expect(parsed.session?.ui.orthoEnabled).toBe(true);
+    expect(parsed.session?.ui.roundTo10Enabled).toBe(true);
     expect(parsed.session?.maps).toHaveLength(1);
   });
 

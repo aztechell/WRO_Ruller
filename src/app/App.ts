@@ -56,6 +56,8 @@ export class App {
       onMapChange: (mapId) => this.handleMapChange(mapId),
       onScaleChange: (scalePercent) => this.handleScaleChange(scalePercent),
       onModeChange: (mode) => this.handleModeChange(mode),
+      onOrthoToggle: (enabled) => this.handleOrthoToggle(enabled),
+      onRoundTo10Toggle: (enabled) => this.handleRoundTo10Toggle(enabled),
       onClearAll: () => this.handleClearAll(),
       onExportPng: () => this.handleExportPng(),
       onSaveSession: () => this.handleSaveSession(),
@@ -64,6 +66,8 @@ export class App {
 
     this.store.subscribe((state) => {
       this.toolbar.setMode(state.mode);
+      this.toolbar.setOrthoEnabled(state.orthoEnabled);
+      this.toolbar.setRoundTo10Enabled(state.roundTo10Enabled);
       this.toolbar.setActiveMap(state.activeMapId);
       this.scheduleRender();
     });
@@ -183,6 +187,18 @@ export class App {
 
   private handleModeChange(mode: DrawMode): void {
     this.store.setMode(mode);
+    this.canvas.focus();
+  }
+
+  private handleOrthoToggle(enabled: boolean): void {
+    this.store.setOrthoEnabled(enabled);
+    this.toolbar.setStatus(`Ortho mode ${enabled ? "enabled" : "disabled"}`, "info");
+    this.canvas.focus();
+  }
+
+  private handleRoundTo10Toggle(enabled: boolean): void {
+    this.store.setRoundTo10Enabled(enabled);
+    this.toolbar.setStatus(`Round-to-10 mode ${enabled ? "enabled" : "disabled"}`, "info");
     this.canvas.focus();
   }
 

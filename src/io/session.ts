@@ -138,6 +138,8 @@ export function serializeSession(state: AppState): SessionV1 {
     maps,
     ui: {
       mode: state.mode,
+      orthoEnabled: state.orthoEnabled,
+      roundTo10Enabled: state.roundTo10Enabled,
     },
   };
 }
@@ -173,6 +175,12 @@ export function parseSession(text: string, availableMapIds: Set<string>): ParseS
   if (mode === "segment" && (!isRecord(uiValue) || uiValue.mode !== "segment")) {
     warnings.push("Invalid or missing ui.mode; defaulted to segment");
   }
+  const orthoEnabled = isRecord(uiValue) && typeof uiValue.orthoEnabled === "boolean"
+    ? uiValue.orthoEnabled
+    : false;
+  const roundTo10Enabled = isRecord(uiValue) && typeof uiValue.roundTo10Enabled === "boolean"
+    ? uiValue.roundTo10Enabled
+    : false;
 
   const mapsValue = payload.maps;
   if (!Array.isArray(mapsValue)) {
@@ -227,6 +235,8 @@ export function parseSession(text: string, availableMapIds: Set<string>): ParseS
       maps,
       ui: {
         mode,
+        orthoEnabled,
+        roundTo10Enabled,
       },
     },
     warnings,

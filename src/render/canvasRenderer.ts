@@ -1,4 +1,4 @@
-import { midpoint, roundedDistanceMm, worldToScreen } from "../geometry/measure";
+import { interiorAngleDeg, midpoint, roundedDistanceMm, worldToScreen } from "../geometry/measure";
 import type { LoadedMap } from "../io/mapConfig";
 import type { DrawMode, InProgressState, PointPx, Polyline, Segment, ViewState } from "../state/types";
 
@@ -170,6 +170,7 @@ export class CanvasRenderer {
         const value = roundedDistanceMm(a, b, map.spec);
         this.drawLabel(`${value} mm`, screenCenter.x, screenCenter.y);
       }
+      this.drawPolylineAngleLabels(view, polyline.points);
     }
   }
 
@@ -198,6 +199,11 @@ export class CanvasRenderer {
       const center = midpoint(last, pointer);
       const screenCenter = worldToScreen(center, view);
       this.drawLabel(`${value} mm`, screenCenter.x, screenCenter.y, true);
+
+      if (inProgress.polylinePoints.length >= 2) {
+        const previewPoints = [...inProgress.polylinePoints, pointer];
+        this.drawPolylineAngleLabels(view, previewPoints, true);
+      }
     }
   }
 
@@ -253,6 +259,70 @@ export class CanvasRenderer {
     ctx.fillStyle = "#0f172a";
     ctx.fillText(text, x, y);
     ctx.restore();
+  }
+
+  private drawPolylineAngleLabels(view: ViewState, points: PointPx[], preview = false): void {
+    if (points.length < 3) {
+      return;
+    }
+
+    for (let i = 1; i < points.length - 1; i += 1) {
+      const prev = points[i - 1];
+      const vertex = points[i];
+      const next = points[i + 1];
+      const angleDeg = interiorAngleDeg(prev, vertex, next);
+      if (angleDeg === null) {
+        continue;
+      }
+      const screenPosition = this.computeAngleLabelPosition(prev, vertex, next, view);
+      this.drawLabel(`${Math.round(angleDeg)}°`, screenPosition.x, screenPosition.y, preview);
+    }
+  }
+
+  private computeAngleLabelPosition(
+    prev: PointPx,
+    vertex: PointPx,
+    next: PointPx,
+    view: ViewState,
+  ): PointPx {
+    const ux1 = prev.x - vertex.x;
+    const uy1 = prev.y - vertex.y;
+    const ux2 = next.x - vertex.x;
+    const uy2 = next.y - vertex.y;
+
+    const len1 = Math.hypot(ux1, uy1);
+    const len2 = Math.hypot(ux2, uy2);
+    let bx = 0;
+    let by = 0;
+
+    if (len1 > 0 && len2 > 0) {
+      bx = ux1 / len1 + ux2 / len2;
+      by = uy1 / len1 + uy2 / len2;
+    }
+
+    const bisectorLength = Math.hypot(bx, by);
+    if (bisectorLength < 1e-6) {
+      const vx = next.x - prev.x;
+      const vy = next.y - prev.y;
+      const vLength = Math.hypot(vx, vy);
+      if (vLength > 0) {
+        bx = -vy / vLength;
+        by = vx / vLength;
+      } else {
+        bx = 0;
+        by = -1;
+      }
+    } else {
+      bx /= bisectorLength;
+      by /= bisectorLength;
+    }
+
+    const worldOffset = 24 / Math.max(view.zoom, 1e-6);
+    const worldPoint = {
+      x: vertex.x + bx * worldOffset,
+      y: vertex.y + by * worldOffset,
+    };
+    return worldToScreen(worldPoint, view);
   }
 
   private addRoundedRectPath(x: number, y: number, width: number, height: number, radius: number): void {

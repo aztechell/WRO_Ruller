@@ -41,6 +41,23 @@ export function midpoint(a: PointPx, b: PointPx): PointPx {
   };
 }
 
+export function interiorAngleDeg(prev: PointPx, vertex: PointPx, next: PointPx): number | null {
+  const ax = prev.x - vertex.x;
+  const ay = prev.y - vertex.y;
+  const bx = next.x - vertex.x;
+  const by = next.y - vertex.y;
+
+  const lenA = Math.hypot(ax, ay);
+  const lenB = Math.hypot(bx, by);
+  if (lenA <= 0 || lenB <= 0) {
+    return null;
+  }
+
+  const dot = ax * bx + ay * by;
+  const cosine = clamp(dot / (lenA * lenB), -1, 1);
+  return (Math.acos(cosine) * 180) / Math.PI;
+}
+
 export function clamp(value: number, min: number, max: number): number {
   if (value < min) {
     return min;

@@ -8,8 +8,11 @@ Static browser version of the WRO map ruler tool, designed for GitHub Pages.
 - Map scale selector: `25%`, `50%`, `75%`, `100%` (default `25%`)
 - Segment and polyline measurement modes
 - Distance labels in millimeters
+- Polyline interior angle labels
 - Vertex snapping
-- Wheel zoom (around cursor) and middle-mouse pan
+- Wheel zoom (around cursor), middle-mouse pan, and arrow-key continuous pan
+- Ortho (V/H) drawing mode
+- Round-to-10 mm drawing mode
 - Clear drawings for current map
 - Export current viewport as PNG
 - Save/Load drawing session as JSON
